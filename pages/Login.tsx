@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNews } from '../context/NewsContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, UserCheck, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
 import { UserRole } from '../types';
+import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
   const [loginType, setLoginType] = useState<UserRole>('publisher');
@@ -14,13 +15,22 @@ export const Login: React.FC = () => {
   
   // Recovery State
   const [isRecovering, setIsRecovering] = useState(false);
-  const [recoveryStep, setRecoveryStep] = useState(1);
-  const [recoveryIdentifier, setRecoveryIdentifier] = useState('');
-  const [verificationCode, setVerificationCode] = useState(''); 
+  const [isResettingMode, setIsResettingMode] = useState(false); // Mode for actually typing new password
+  const [recoveryEmail, setRecoveryEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  const { login, initiateRecovery, completeRecovery, emailSettings } = useNews();
+  const { login, initiateRecovery, resetPassword } = useNews();
   const navigate = useNavigate();
+
+  // Check URL for Password Reset Hash
+  useEffect(() => {
+    supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+            setIsRecovering(true);
+            setIsResettingMode(true);
+        }
+    });
+  }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,10 +46,11 @@ export const Login: React.FC = () => {
                 navigate('/');
             }
         } else {
-            setError(`Invalid credentials, incorrect role, or account suspended/pending approval.`);
+            // Error usually thrown by context, but fallback:
+            setError(`Invalid credentials.`);
         }
-    } catch (err) {
-        setError('Login failed due to a network error.');
+    } catch (err: any) {
+        setError(err.message || 'Login failed.');
     } finally {
         setLoading(false);
     }
@@ -48,45 +59,39 @@ export const Login: React.FC = () => {
   const handleRecoveryStart = async (e: React.FormEvent) => {
       e.preventDefault();
       setError('');
+      setLoading(true);
       
-      const result = await initiateRecovery(recoveryIdentifier);
+      const result = await initiateRecovery(recoveryEmail);
 
-      if (result) {
-          alert(`(SIMULATION EMAIL sent to ${emailSettings.senderEmail})\n\n${result.message}`);
-          setRecoveryStep(2);
+      if (result.success) {
+          alert(result.message);
+          setIsRecovering(false); // Close modal, user must check email
       } else {
-          setError('Account not found. Please check your email or username.');
+          setError(result.message);
       }
+      setLoading(false);
   };
 
-  const handleRecoveryComplete = async (e: React.FormEvent) => {
+  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       setError('');
-
       if (newPassword.length < 6) {
           setError('New password must be at least 6 characters.');
           return;
       }
 
-      const success = await completeRecovery(recoveryIdentifier, verificationCode, newPassword);
+      setLoading(true);
+      const success = await resetPassword(newPassword);
       if (success) {
-          alert('Password reset successfully! You can now login with your new password.');
+          alert('Password updated successfully! Redirecting...');
           setIsRecovering(false);
-          setRecoveryStep(1);
-          setRecoveryIdentifier('');
-          setVerificationCode('');
+          setIsResettingMode(false);
           setNewPassword('');
-          if (recoveryIdentifier.includes('@')) setEmail(recoveryIdentifier);
+          navigate('/admin');
       } else {
-          setError('Invalid verification code or code expired. Please try again.');
+          setError('Failed to update password. Try again.');
       }
-  };
-
-  const toggleRecovery = () => {
-      setIsRecovering(!isRecovering);
-      setError('');
-      setRecoveryStep(1);
-      setRecoveryIdentifier('');
+      setLoading(false);
   };
 
   return (
@@ -120,12 +125,12 @@ export const Login: React.FC = () => {
                     <KeyRound size={24} />
                 </div>
                 <h2 className="text-center text-2xl font-serif font-bold text-gray-900">
-                    {recoveryStep === 1 ? 'Recover Password' : 'Set New Password'}
+                    {isResettingMode ? 'Set New Password' : 'Reset Password'}
                 </h2>
                 <p className="mt-2 text-center text-sm text-gray-600 mb-6">
-                    {recoveryStep === 1 
-                        ? 'Enter your email or username to search for your account.' 
-                        : 'Enter the verification code sent to your email.'}
+                    {isResettingMode 
+                        ? 'Enter your new secure password below.' 
+                        : 'Enter your email address. We will send you a link to reset your password.'}
                 </p>
 
                 {error && (
@@ -134,41 +139,33 @@ export const Login: React.FC = () => {
                     </div>
                 )}
 
-                {recoveryStep === 1 ? (
+                {!isResettingMode ? (
                      <form className="w-full space-y-6" onSubmit={handleRecoveryStart}>
                         <div>
                             <input
-                                type="text"
+                                type="email"
                                 required
                                 className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
-                                placeholder="Email or Username"
-                                value={recoveryIdentifier}
-                                onChange={(e) => setRecoveryIdentifier(e.target.value)}
+                                placeholder="Enter your email"
+                                value={recoveryEmail}
+                                onChange={(e) => setRecoveryEmail(e.target.value)}
                             />
                         </div>
                         <button
                             type="submit"
-                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-ink hover:bg-gray-800 transition-colors"
+                            disabled={loading}
+                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-ink hover:bg-gray-800 transition-colors disabled:opacity-70"
                         >
-                            Find Account
+                            {loading ? 'Sending...' : 'Send Reset Link'}
                         </button>
                      </form>
                 ) : (
-                    <form className="w-full space-y-6" onSubmit={handleRecoveryComplete}>
+                    <form className="w-full space-y-6" onSubmit={handlePasswordResetSubmit}>
                         <div>
-                            <input
-                                type="text"
-                                required
-                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
-                                placeholder="Verification Code or Master Key"
-                                value={verificationCode}
-                                onChange={(e) => setVerificationCode(e.target.value)}
-                            />
-                            <p className="text-[10px] text-gray-400 px-1 py-1">If you are the Chief Editor and forgot your password, enter your Backup Master Key here.</p>
                             <input
                                 type="password"
                                 required
-                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b focus:outline-none focus:ring-gold focus:border-gold sm:text-sm border-t-0"
+                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
                                 placeholder="New Password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
@@ -176,15 +173,16 @@ export const Login: React.FC = () => {
                         </div>
                         <button
                             type="submit"
-                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 transition-colors"
+                            disabled={loading}
+                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-70"
                         >
-                            Reset Password
+                            {loading ? 'Updating...' : 'Save Password'}
                         </button>
                     </form>
                 )}
 
                 <button 
-                    onClick={toggleRecovery}
+                    onClick={() => { setIsRecovering(false); setIsResettingMode(false); }}
                     className="mt-6 flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-ink transition-colors"
                 >
                     <ArrowLeft size={14} /> Back to Login
@@ -234,7 +232,7 @@ export const Login: React.FC = () => {
                     <div className="flex justify-end">
                         <button 
                             type="button" 
-                            onClick={toggleRecovery}
+                            onClick={() => setIsRecovering(true)}
                             className="text-xs font-bold text-gray-500 hover:text-ink hover:underline"
                         >
                             Forgot Password?
