@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNews } from '../context/NewsContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, UserCheck, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
 import { UserRole } from '../types';
-import { supabase } from '../lib/supabase';
 
 export const Login: React.FC = () => {
   const [loginType, setLoginType] = useState<UserRole>('publisher');
@@ -15,22 +14,13 @@ export const Login: React.FC = () => {
   
   // Recovery State
   const [isRecovering, setIsRecovering] = useState(false);
-  const [isResettingMode, setIsResettingMode] = useState(false); // Mode for actually typing new password
+  const [recoveryStep, setRecoveryStep] = useState<'email' | 'code'>('email');
   const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  const { login, initiateRecovery, resetPassword } = useNews();
+  const { login, initiateRecovery, completeRecovery } = useNews();
   const navigate = useNavigate();
-
-  // Check URL for Password Reset Hash
-  useEffect(() => {
-    supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'PASSWORD_RECOVERY') {
-            setIsRecovering(true);
-            setIsResettingMode(true);
-        }
-    });
-  }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +36,6 @@ export const Login: React.FC = () => {
                 navigate('/');
             }
         } else {
-            // Error usually thrown by context, but fallback:
             setError(`Invalid credentials.`);
         }
     } catch (err: any) {
@@ -64,15 +53,20 @@ export const Login: React.FC = () => {
       const result = await initiateRecovery(recoveryEmail);
 
       if (result.success) {
-          alert(result.message);
-          setIsRecovering(false); // Close modal, user must check email
+          if (result.code) {
+              // Show the simulated code in an alert as requested
+              alert(result.message);
+              setRecoveryStep('code');
+          } else {
+              setError("Unexpected error: No code generated.");
+          }
       } else {
           setError(result.message);
       }
       setLoading(false);
   };
 
-  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
+  const handleRecoveryComplete = async (e: React.FormEvent) => {
       e.preventDefault();
       setError('');
       if (newPassword.length < 6) {
@@ -81,15 +75,18 @@ export const Login: React.FC = () => {
       }
 
       setLoading(true);
-      const success = await resetPassword(newPassword);
-      if (success) {
-          alert('Password updated successfully! Redirecting...');
+      const result = await completeRecovery(recoveryEmail, verificationCode, newPassword);
+      
+      if (result.success) {
+          alert('Password updated successfully! You can now login.');
           setIsRecovering(false);
-          setIsResettingMode(false);
+          setRecoveryStep('email');
+          setRecoveryEmail('');
+          setVerificationCode('');
           setNewPassword('');
-          navigate('/admin');
+          setEmail(recoveryEmail); // Prefill login
       } else {
-          setError('Failed to update password. Try again.');
+          setError(result.message);
       }
       setLoading(false);
   };
@@ -125,12 +122,12 @@ export const Login: React.FC = () => {
                     <KeyRound size={24} />
                 </div>
                 <h2 className="text-center text-2xl font-serif font-bold text-gray-900">
-                    {isResettingMode ? 'Set New Password' : 'Reset Password'}
+                    {recoveryStep === 'code' ? 'Verify & Reset' : 'Reset Password'}
                 </h2>
                 <p className="mt-2 text-center text-sm text-gray-600 mb-6">
-                    {isResettingMode 
-                        ? 'Enter your new secure password below.' 
-                        : 'Enter your email address. We will send you a link to reset your password.'}
+                    {recoveryStep === 'code'
+                        ? 'Enter the code shown in the alert and your new password.' 
+                        : 'Enter your email address to generate a verification code.'}
                 </p>
 
                 {error && (
@@ -139,7 +136,7 @@ export const Login: React.FC = () => {
                     </div>
                 )}
 
-                {!isResettingMode ? (
+                {recoveryStep === 'email' ? (
                      <form className="w-full space-y-6" onSubmit={handleRecoveryStart}>
                         <div>
                             <input
@@ -156,16 +153,26 @@ export const Login: React.FC = () => {
                             disabled={loading}
                             className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-ink hover:bg-gray-800 transition-colors disabled:opacity-70"
                         >
-                            {loading ? 'Sending...' : 'Send Reset Link'}
+                            {loading ? 'Generating Code...' : 'Get Verification Code'}
                         </button>
                      </form>
                 ) : (
-                    <form className="w-full space-y-6" onSubmit={handlePasswordResetSubmit}>
+                    <form className="w-full space-y-6" onSubmit={handleRecoveryComplete}>
+                        <div>
+                            <input
+                                type="text"
+                                required
+                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
+                                placeholder="Verification Code"
+                                value={verificationCode}
+                                onChange={(e) => setVerificationCode(e.target.value)}
+                            />
+                        </div>
                         <div>
                             <input
                                 type="password"
                                 required
-                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
+                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
                                 placeholder="New Password"
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
@@ -176,13 +183,13 @@ export const Login: React.FC = () => {
                             disabled={loading}
                             className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-70"
                         >
-                            {loading ? 'Updating...' : 'Save Password'}
+                            {loading ? 'Updating...' : 'Set New Password'}
                         </button>
                     </form>
                 )}
 
                 <button 
-                    onClick={() => { setIsRecovering(false); setIsResettingMode(false); }}
+                    onClick={() => { setIsRecovering(false); setRecoveryStep('email'); }}
                     className="mt-6 flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-ink transition-colors"
                 >
                     <ArrowLeft size={14} /> Back to Login
