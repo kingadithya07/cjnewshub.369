@@ -239,42 +239,8 @@ export const INITIAL_EPAPER_PAGES: EPaperPage[] = [
   }
 ];
 
-export const INITIAL_USERS: User[] = [
-  {
-    id: 'admin1',
-    name: 'Chief Editor',
-    email: 'kingadithya07@gmail.com',
-    password: 'Vvrs###98851',
-    role: 'admin',
-    status: 'active',
-    ip: '192.168.1.100',
-    joinedAt: '01-01-2023',
-    profilePicUrl: 'https://i.pravatar.cc/150?u=admin1'
-  },
-  {
-    id: 'pub1',
-    name: 'Publisher Adithya',
-    email: 'admin@gmail.com',
-    password: 'Vvrs###98851',
-    role: 'publisher',
-    status: 'active',
-    ip: '192.168.1.105',
-    joinedAt: '15-05-2023',
-    profilePicUrl: 'https://i.pravatar.cc/150?u=pub1'
-  },
-  {
-    id: 'sub1',
-    name: 'John Reader',
-    email: 'reader@example.com',
-    password: 'password123',
-    role: 'subscriber',
-    status: 'active',
-    ip: '192.168.1.110',
-    joinedAt: '20-11-2025',
-    subscriptionPlan: 'free',
-    profilePicUrl: 'https://i.pravatar.cc/150?u=sub1'
-  }
-];
+// Start with NO users. The Admin must be created via the Setup page.
+export const INITIAL_USERS: User[] = [];
 
 export const INITIAL_ADS: Advertisement[] = [
     {

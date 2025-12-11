@@ -24,6 +24,7 @@ interface NewsContextType {
   login: (email: string, password: string, role?: UserRole) => Promise<User | null>;
   register: (name: string, email: string, password: string, role?: UserRole) => Promise<{ success: boolean; message?: string }>;
   createAdmin: (name: string, email: string, password: string) => Promise<boolean>;
+  setupMasterAdmin: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
   resetPassword: (password: string) => Promise<boolean>; 
   initiateRecovery: (email: string) => Promise<{ success: boolean, message: string, code?: string }>;
@@ -136,9 +137,12 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setter(data as T[]);
             } else {
                 console.log(`Table ${table} is empty. Attempting to seed...`);
-                const { error: insertError } = await supabase.from(table).insert(fallback as any);
-                if (insertError) {
-                    console.warn(`Failed to seed ${table}:`, insertError.message);
+                // Note: We do NOT auto-seed users anymore to respect security of empty slate
+                if (table !== 'users') {
+                    const { error: insertError } = await supabase.from(table).insert(fallback as any);
+                    if (insertError) {
+                        console.warn(`Failed to seed ${table}:`, insertError.message);
+                    }
                 }
                 setter(fallback);
             }
@@ -279,7 +283,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const createAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
       if(!supabase) return false;
-      if (currentUser?.id !== CHIEF_EDITOR_ID) return false;
+      if (currentUser?.id !== CHIEF_EDITOR_ID) return false; // Only Main Admin can create others
       
       const newAdmin: User = {
           id: Date.now().toString(),
@@ -296,6 +300,43 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await supabase.from('users').insert([newAdmin]);
       if(!error) setUsers(prev => [...prev, newAdmin]);
       return !error;
+  };
+
+  // Special One-Time Setup Function
+  const setupMasterAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
+      if(!supabase) return false;
+      
+      // Check if ANY admin already exists
+      const existingAdmins = users.filter(u => u.role === 'admin');
+      
+      // Double check DB
+      const { data: dbAdmins } = await supabase.from('users').select('*').eq('role', 'admin');
+      
+      if (existingAdmins.length > 0 || (dbAdmins && dbAdmins.length > 0)) {
+          console.warn("Setup blocked: Admins already exist.");
+          return false;
+      }
+
+      const masterAdmin: User = {
+          id: CHIEF_EDITOR_ID, // Use the constant ID for logic compatibility
+          name,
+          email,
+          password,
+          role: 'admin',
+          status: 'active',
+          ip: visitorIp,
+          joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+          profilePicUrl: `https://i.pravatar.cc/150?u=admin`
+      };
+
+      const { error } = await supabase.from('users').insert([masterAdmin]);
+      if (error) {
+          console.error("DB Setup Error", error);
+          // Fallback to local state so user can login in this session even if DB fails
+      }
+      
+      setUsers(prev => [...prev, masterAdmin]);
+      return true;
   };
 
   const logout = async () => {
@@ -626,7 +667,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       articles, categories, ePaperPages, clippings, currentUser, users, advertisements,
       watermarkSettings, recoveryRequests, emailSettings, subscriptionSettings, adSettings,
       comments, contactMessages, classifieds,
-      login, register, createAdmin, logout, resetPassword, initiateRecovery, completeRecovery,
+      login, register, createAdmin, setupMasterAdmin, logout, resetPassword, initiateRecovery, completeRecovery,
       initiateProfileUpdate, completeProfileUpdate, updateEmailSettings, updateSubscriptionSettings,
       updateAdSettings, getAnalytics, addArticle, updateArticle, deleteArticle, incrementArticleView,
       addCategory, deleteCategory, addEPaperPage, deleteEPaperPage, deleteAllEPaperPages, addClipping,
