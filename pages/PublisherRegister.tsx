@@ -27,7 +27,12 @@ export const PublisherRegister: React.FC = () => {
     try {
         const result = await register(name, email, password);
         if (result.success) {
-          navigate('/admin');
+          if (result.message) {
+              alert(result.message);
+              navigate('/login');
+          } else {
+              navigate('/admin');
+          }
         } else {
           setError(result.message || 'Email already registered.');
         }

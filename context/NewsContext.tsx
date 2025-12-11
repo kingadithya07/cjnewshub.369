@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Article, EPaperPage, Clipping, User, UserRole, Advertisement, WatermarkSettings, RecoveryRequest, ProfileUpdateRequest, EmailSettings, SubscriptionSettings, AdSettings, AnalyticsData, Comment, ContactMessage, Classified } from '../types';
 import { CHIEF_EDITOR_ID, MASTER_RECOVERY_KEY, DEFAULT_EMAIL_SETTINGS, DEFAULT_SUBSCRIPTION_SETTINGS, DEFAULT_AD_SETTINGS, INITIAL_ARTICLES, INITIAL_USERS, INITIAL_EPAPER_PAGES, INITIAL_ADS, INITIAL_CLASSIFIEDS } from '../constants';
+import { supabase } from '../lib/supabase';
 
 interface NewsContextType {
   articles: Article[];
@@ -79,58 +80,19 @@ interface NewsContextType {
 const NewsContext = createContext<NewsContextType | undefined>(undefined);
 
 export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Initialize state with Lazy Initializers to load from LocalStorage
-  const [articles, setArticles] = useState<Article[]>(() => {
-      const saved = localStorage.getItem('cj_articles');
-      return saved ? JSON.parse(saved) : INITIAL_ARTICLES;
-  });
+  // --- STATE ---
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [categories, setCategories] = useState<string[]>(['World', 'Business', 'Technology', 'Culture', 'Sports', 'Opinion']);
+  const [ePaperPages, setEPaperPages] = useState<EPaperPage[]>([]);
+  const [clippings, setClippings] = useState<Clipping[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [advertisements, setAdvertisements] = useState<Advertisement[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [classifieds, setClassifieds] = useState<Classified[]>([]);
 
-  const [categories, setCategories] = useState<string[]>(() => {
-      const saved = localStorage.getItem('cj_categories');
-      return saved ? JSON.parse(saved) : ['World', 'Business', 'Technology', 'Culture', 'Sports', 'Opinion'];
-  });
-
-  const [ePaperPages, setEPaperPages] = useState<EPaperPage[]>(() => {
-      const saved = localStorage.getItem('cj_epaper');
-      return saved ? JSON.parse(saved) : INITIAL_EPAPER_PAGES;
-  });
-
-  const [clippings, setClippings] = useState<Clipping[]>(() => {
-      const saved = localStorage.getItem('cj_clippings');
-      return saved ? JSON.parse(saved) : [];
-  });
-  
-  const [users, setUsers] = useState<User[]>(() => {
-      const saved = localStorage.getItem('cj_users');
-      return saved ? JSON.parse(saved) : INITIAL_USERS;
-  });
-
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-      const saved = localStorage.getItem('cj_current_user');
-      return saved ? JSON.parse(saved) : null;
-  });
-
-  const [advertisements, setAdvertisements] = useState<Advertisement[]>(() => {
-      const saved = localStorage.getItem('cj_ads');
-      return saved ? JSON.parse(saved) : INITIAL_ADS;
-  });
-
-  const [comments, setComments] = useState<Comment[]>(() => {
-      const saved = localStorage.getItem('cj_comments');
-      return saved ? JSON.parse(saved) : [];
-  });
-
-  const [contactMessages, setContactMessages] = useState<ContactMessage[]>(() => {
-      const saved = localStorage.getItem('cj_messages');
-      return saved ? JSON.parse(saved) : [];
-  });
-
-  const [classifieds, setClassifieds] = useState<Classified[]>(() => {
-      const saved = localStorage.getItem('cj_classifieds');
-      return saved ? JSON.parse(saved) : INITIAL_CLASSIFIEDS;
-  });
-
-  // Settings State
+  // Settings State (Kept in LocalStorage for specific browser config, could move to DB table 'settings' if needed globally)
   const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettings>(() => {
       const saved = localStorage.getItem('cj_watermark_settings');
       return saved ? JSON.parse(saved) : { text: 'CJ NEWS HUB', logoUrl: null };
@@ -151,10 +113,68 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return saved ? JSON.parse(saved) : DEFAULT_AD_SETTINGS;
   });
 
-  // Temporary State (not persisted)
+  // Temporary State
   const [recoveryRequests, setRecoveryRequests] = useState<RecoveryRequest[]>([]);
   const [profileUpdateRequests, setProfileUpdateRequests] = useState<ProfileUpdateRequest[]>([]);
   const [visitorIp, setVisitorIp] = useState<string>('');
+
+  // --- INITIAL DATA LOAD & SEEDING ---
+  const fetchData = async () => {
+      if(!supabase) return;
+
+      // 1. Articles
+      const { data: articlesData } = await supabase.from('articles').select('*');
+      if (articlesData && articlesData.length > 0) {
+          setArticles(articlesData);
+      } else {
+          // Seed Initial Articles
+          await supabase.from('articles').insert(INITIAL_ARTICLES);
+          setArticles(INITIAL_ARTICLES);
+      }
+
+      // 2. Users
+      const { data: usersData } = await supabase.from('users').select('*');
+      if (usersData && usersData.length > 0) {
+          setUsers(usersData);
+      } else {
+          await supabase.from('users').insert(INITIAL_USERS);
+          setUsers(INITIAL_USERS);
+      }
+
+      // 3. EPaper
+      const { data: epaperData } = await supabase.from('epaper_pages').select('*');
+      if (epaperData && epaperData.length > 0) setEPaperPages(epaperData);
+      else {
+          await supabase.from('epaper_pages').insert(INITIAL_EPAPER_PAGES);
+          setEPaperPages(INITIAL_EPAPER_PAGES);
+      }
+
+      // 4. Ads
+      const { data: adsData } = await supabase.from('advertisements').select('*');
+      if (adsData && adsData.length > 0) setAdvertisements(adsData);
+      else {
+          await supabase.from('advertisements').insert(INITIAL_ADS);
+          setAdvertisements(INITIAL_ADS);
+      }
+      
+      // 5. Classifieds
+      const { data: classifiedsData } = await supabase.from('classifieds').select('*');
+      if (classifiedsData && classifiedsData.length > 0) setClassifieds(classifiedsData);
+      else {
+          await supabase.from('classifieds').insert(INITIAL_CLASSIFIEDS);
+          setClassifieds(INITIAL_CLASSIFIEDS);
+      }
+
+      // 6. Comments, Messages, Clippings (No seed data needed usually)
+      const { data: commentsData } = await supabase.from('comments').select('*');
+      if(commentsData) setComments(commentsData);
+
+      const { data: msgsData } = await supabase.from('messages').select('*');
+      if(msgsData) setContactMessages(msgsData);
+
+      const { data: clipsData } = await supabase.from('clippings').select('*');
+      if(clipsData) setClippings(clipsData);
+  };
 
   useEffect(() => {
     let ip = localStorage.getItem('cj_visitor_ip');
@@ -163,19 +183,15 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
        localStorage.setItem('cj_visitor_ip', ip);
     }
     setVisitorIp(ip);
+
+    // Persist session user
+    const savedUser = localStorage.getItem('cj_current_user');
+    if (savedUser) setCurrentUser(JSON.parse(savedUser));
+
+    fetchData();
   }, []);
 
-  // --- Persistence Effects ---
-  useEffect(() => localStorage.setItem('cj_articles', JSON.stringify(articles)), [articles]);
-  useEffect(() => localStorage.setItem('cj_categories', JSON.stringify(categories)), [categories]);
-  useEffect(() => localStorage.setItem('cj_epaper', JSON.stringify(ePaperPages)), [ePaperPages]);
-  useEffect(() => localStorage.setItem('cj_clippings', JSON.stringify(clippings)), [clippings]);
-  useEffect(() => localStorage.setItem('cj_users', JSON.stringify(users)), [users]);
-  useEffect(() => localStorage.setItem('cj_ads', JSON.stringify(advertisements)), [advertisements]);
-  useEffect(() => localStorage.setItem('cj_comments', JSON.stringify(comments)), [comments]);
-  useEffect(() => localStorage.setItem('cj_messages', JSON.stringify(contactMessages)), [contactMessages]);
-  useEffect(() => localStorage.setItem('cj_classifieds', JSON.stringify(classifieds)), [classifieds]);
-  
+  // --- PERSIST SETTINGS (Local only for now) ---
   useEffect(() => localStorage.setItem('cj_watermark_settings', JSON.stringify(watermarkSettings)), [watermarkSettings]);
   useEffect(() => localStorage.setItem('cj_email_settings', JSON.stringify(emailSettings)), [emailSettings]);
   useEffect(() => localStorage.setItem('cj_sub_settings', JSON.stringify(subscriptionSettings)), [subscriptionSettings]);
@@ -190,10 +206,17 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
 
-  // --- Functions ---
+  // --- FUNCTIONS ---
 
   const login = async (email: string, password: string, role?: UserRole): Promise<User | null> => {
-    const user = users.find(u => u.email === email && u.password === password);
+    if(!supabase) return null;
+    
+    // Sync users first
+    const { data: latestUsers } = await supabase.from('users').select('*');
+    if(latestUsers) setUsers(latestUsers);
+
+    const user = (latestUsers || users).find(u => u.email === email && u.password === password);
+    
     if (user) {
       if (role && user.role !== role) return null;
       if (user.status === 'blocked' || user.status === 'pending') return null;
@@ -205,33 +228,54 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async (name: string, email: string, password: string, role: UserRole = 'publisher'): Promise<{ success: boolean; message?: string }> => {
-    if (users.find(u => u.email === email)) {
+    if(!supabase) return { success: false, message: "Database error" };
+
+    const { data: existing } = await supabase.from('users').select('*').eq('email', email);
+    if (existing && existing.length > 0) {
         return { success: false, message: "Email already registered." };
     }
+
+    const initialStatus = role === 'publisher' ? 'pending' : 'active';
 
     const newUser: User = {
       id: Date.now().toString(),
       name,
       email,
-      password,
+      password, // Storing as plain text per original design. In production, use Supabase Auth.
       role: role, 
-      status: role === 'publisher' ? 'pending' : 'active',
+      status: initialStatus,
       ip: visitorIp,
       joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
       subscriptionPlan: role === 'subscriber' ? 'free' : undefined,
       profilePicUrl: `https://i.pravatar.cc/150?u=${Date.now()}`
     };
 
+    const { error } = await supabase.from('users').insert([newUser]);
+    
+    if (error) {
+        console.error("Supabase error:", error);
+        return { success: false, message: "Registration failed." };
+    }
+
     setUsers(prev => [...prev, newUser]);
+    
     if (newUser.status === 'active' && !currentUser) {
         setCurrentUser(newUser);
     }
+
+    if (initialStatus === 'pending') {
+        return { success: true, message: "Registration successful! Your account is pending admin approval." };
+    }
+
     return { success: true };
   };
 
   const createAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
+      if(!supabase) return false;
       if (currentUser?.id !== CHIEF_EDITOR_ID) return false;
-      if (users.find(u => u.email === email)) return false;
+      
+      const { data: existing } = await supabase.from('users').select('*').eq('email', email);
+      if (existing && existing.length > 0) return false;
 
       const newAdmin: User = {
           id: Date.now().toString(),
@@ -244,20 +288,27 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
           profilePicUrl: `https://i.pravatar.cc/150?u=${Date.now()}`
       };
-      setUsers(prev => [...prev, newAdmin]);
-      return true;
+      
+      const { error } = await supabase.from('users').insert([newAdmin]);
+      if(!error) setUsers(prev => [...prev, newAdmin]);
+      return !error;
   };
 
   const resetPassword = async (identifier: string, newPassword: string): Promise<boolean> => {
-      const userIndex = users.findIndex(u => u.email === identifier || u.name === identifier);
-      if (userIndex === -1) return false;
+      if(!supabase) return false;
+      const user = users.find(u => u.email === identifier || u.name === identifier);
+      if (!user) return false;
 
-      const updatedUsers = [...users];
-      updatedUsers[userIndex] = { ...updatedUsers[userIndex], password: newPassword };
-      setUsers(updatedUsers);
-      return true;
+      const { error } = await supabase.from('users').update({ password: newPassword }).eq('id', user.id);
+      
+      if(!error) {
+          setUsers(prev => prev.map(u => u.id === user.id ? { ...u, password: newPassword } : u));
+          return true;
+      }
+      return false;
   };
 
+  // Recovery logic remains local state + email simulation for now
   const initiateRecovery = async (identifier: string): Promise<{ code: string, message: string } | null> => {
       const user = users.find(u => u.email.toLowerCase() === identifier.toLowerCase() || u.name.toLowerCase() === identifier.toLowerCase());
       if (!user) return null;
@@ -318,21 +369,25 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const completeProfileUpdate = async (code: string): Promise<boolean> => {
-      if (!currentUser) return false;
+      if (!currentUser || !supabase) return false;
       const request = profileUpdateRequests.find(req => req.userId === currentUser.id && req.verificationCode === code);
       if (!request) return false;
 
-      const updatedUser = { 
-          ...currentUser, 
-          email: request.newEmail || currentUser.email,
-          password: request.newPassword || currentUser.password,
-          profilePicUrl: request.newProfilePic || currentUser.profilePicUrl
-      };
+      const updates: any = {};
+      if(request.newEmail) updates.email = request.newEmail;
+      if(request.newPassword) updates.password = request.newPassword;
+      if(request.newProfilePic) updates.profilePicUrl = request.newProfilePic;
 
-      setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
-      setCurrentUser(updatedUser);
-      setProfileUpdateRequests(prev => prev.filter(req => req !== request));
-      return true;
+      const { error } = await supabase.from('users').update(updates).eq('id', currentUser.id);
+
+      if(!error) {
+          const updatedUser = { ...currentUser, ...updates };
+          setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+          setCurrentUser(updatedUser);
+          setProfileUpdateRequests(prev => prev.filter(req => req !== request));
+          return true;
+      }
+      return false;
   };
 
   const updateEmailSettings = async (settings: EmailSettings) => setEmailSettings(settings);
@@ -344,6 +399,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const getAnalytics = (): AnalyticsData => {
+      // Analytics derived from current articles state
       const categoryMap: Record<string, number> = {};
       let totalViews = 0;
       
@@ -368,76 +424,67 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const dailyVisits = Array.from({ length: 7 }, (_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - (6 - i));
-          
-          // If no views, return true 0
-          if (totalViews === 0) {
-              return {
-                  date: d.toLocaleDateString('en-US', { weekday: 'short' }),
-                  visits: 0
-              };
-          }
-
-          // Simulation logic based on actual view count
-          // Distribute roughly 15% of total views per day with some randomness
+          if (totalViews === 0) return { date: d.toLocaleDateString('en-US', { weekday: 'short' }), visits: 0 };
           const baseDaily = totalViews / 7; 
           const randomFactor = 0.5 + Math.random() * 1.0; 
-          return {
-              date: d.toLocaleDateString('en-US', { weekday: 'short' }),
-              visits: Math.round(baseDaily * randomFactor)
-          };
+          return { date: d.toLocaleDateString('en-US', { weekday: 'short' }), visits: Math.round(baseDaily * randomFactor) };
       });
 
-      // Geo Sources - Return 0 percentages if no traffic
       const geoSources = totalViews === 0 ? [
-          { country: 'United States', percentage: 0 },
-          { country: 'United Kingdom', percentage: 0 },
-          { country: 'India', percentage: 0 },
-          { country: 'Canada', percentage: 0 },
-          { country: 'Germany', percentage: 0 },
-          { country: 'Other', percentage: 0 },
+          { country: 'United States', percentage: 0 }, { country: 'United Kingdom', percentage: 0 },
+          { country: 'India', percentage: 0 }, { country: 'Canada', percentage: 0 },
+          { country: 'Germany', percentage: 0 }, { country: 'Other', percentage: 0 },
       ] : [
-          { country: 'United States', percentage: 42 },
-          { country: 'United Kingdom', percentage: 18 },
-          { country: 'India', percentage: 12 },
-          { country: 'Canada', percentage: 8 },
-          { country: 'Germany', percentage: 7 },
-          { country: 'Other', percentage: 13 },
+          { country: 'United States', percentage: 42 }, { country: 'United Kingdom', percentage: 18 },
+          { country: 'India', percentage: 12 }, { country: 'Canada', percentage: 8 },
+          { country: 'Germany', percentage: 7 }, { country: 'Other', percentage: 13 },
       ];
 
-      return {
-          totalViews,
-          avgViewsPerArticle,
-          categoryDistribution,
-          dailyVisits,
-          geoSources
-      };
+      return { totalViews, avgViewsPerArticle, categoryDistribution, dailyVisits, geoSources };
   };
 
   const addArticle = async (article: Article) => {
+    if(!supabase) return;
     const canPublish = currentUser?.role === 'admin' || currentUser?.role === 'publisher';
     const status = canPublish ? article.status : 'pending';
     const newArticle = { ...article, status };
-    setArticles(prev => [newArticle, ...prev]);
+    
+    const { error } = await supabase.from('articles').insert([newArticle]);
+    if(!error) setArticles(prev => [newArticle, ...prev]);
   };
 
   const updateArticle = async (updatedArticle: Article) => {
+    if(!supabase) return;
     const canPublish = currentUser?.role === 'admin' || currentUser?.role === 'publisher';
     const status = canPublish ? updatedArticle.status : 'pending';
     const finalArticle = { ...updatedArticle, status };
-    setArticles(prev => prev.map(a => a.id === finalArticle.id ? finalArticle : a));
+    
+    const { error } = await supabase.from('articles').update(finalArticle).eq('id', finalArticle.id);
+    if(!error) setArticles(prev => prev.map(a => a.id === finalArticle.id ? finalArticle : a));
   };
 
   const deleteArticle = async (id: string) => {
-    setArticles(prev => prev.filter(a => a.id !== id));
+    if(!supabase) return;
+    const { error } = await supabase.from('articles').delete().eq('id', id);
+    if(!error) setArticles(prev => prev.filter(a => a.id !== id));
   };
 
   const incrementArticleView = async (id: string) => {
-    setArticles(prev => prev.map(a => a.id === id ? { ...a, views: (a.views || 0) + 1 } : a));
+    if(!supabase) return;
+    const article = articles.find(a => a.id === id);
+    if(article) {
+        const newViews = (article.views || 0) + 1;
+        // Optimistic update
+        setArticles(prev => prev.map(a => a.id === id ? { ...a, views: newViews } : a));
+        // DB update
+        await supabase.from('articles').update({ views: newViews }).eq('id', id);
+    }
   };
 
   const addCategory = async (category: string) => {
       if (category.trim() && !categories.includes(category.trim())) {
           setCategories(prev => [...prev, category.trim()]);
+          // Categories stored in localStorage or hardcoded for now, could move to DB table
       }
   };
 
@@ -446,104 +493,173 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addEPaperPage = async (page: EPaperPage) => {
+    if(!supabase) return;
     const status: 'active' | 'pending' = currentUser?.id === CHIEF_EDITOR_ID ? 'active' : 'pending';
-    setEPaperPages(prev => [...prev, { ...page, status }]);
+    const newPage = { ...page, status };
+    const { error } = await supabase.from('epaper_pages').insert([newPage]);
+    if(!error) setEPaperPages(prev => [...prev, newPage]);
   };
 
   const deleteEPaperPage = async (id: string) => {
-    setEPaperPages(prev => prev.filter(p => p.id !== id));
+    if(!supabase) return;
+    const { error } = await supabase.from('epaper_pages').delete().eq('id', id);
+    if(!error) setEPaperPages(prev => prev.filter(p => p.id !== id));
   };
 
   const deleteAllEPaperPages = async () => {
-    setEPaperPages([]);
+    if(!supabase) return;
+    const { error } = await supabase.from('epaper_pages').delete().neq('id', '0'); // Delete all
+    if(!error) setEPaperPages([]);
   };
 
   const addClipping = async (clipping: Clipping) => {
+    if(!supabase) return;
     const finalClipping = { ...clipping, userId: currentUser?.id };
-    setClippings(prev => [finalClipping, ...prev]);
+    const { error } = await supabase.from('clippings').insert([finalClipping]);
+    if(!error) setClippings(prev => [finalClipping, ...prev]);
   };
 
   const deleteClipping = async (id: string) => {
-    setClippings(prev => prev.filter(c => c.id !== id));
+    if(!supabase) return;
+    const { error } = await supabase.from('clippings').delete().eq('id', id);
+    if(!error) setClippings(prev => prev.filter(c => c.id !== id));
   };
 
   const deleteUser = async (id: string) => {
+    if(!supabase) return;
     if (id === CHIEF_EDITOR_ID) return;
-    setUsers(prev => prev.filter(u => u.id !== id));
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    if(!error) setUsers(prev => prev.filter(u => u.id !== id));
   };
 
   const toggleUserStatus = async (id: string) => {
+    if(!supabase) return;
     if (id === CHIEF_EDITOR_ID) return;
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'active' ? 'blocked' : 'active' } : u));
+    const user = users.find(u => u.id === id);
+    if(user) {
+        const newStatus = user.status === 'active' ? 'blocked' : 'active';
+        const { error } = await supabase.from('users').update({ status: newStatus }).eq('id', id);
+        if(!error) setUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus } : u));
+    }
   };
 
   const toggleUserSubscription = async (id: string) => {
-      setUsers(prev => prev.map(u => u.id === id ? { 
-          ...u, 
-          subscriptionPlan: u.subscriptionPlan === 'premium' ? 'free' : 'premium',
-          isAdFree: u.subscriptionPlan !== 'premium' // If moving to premium, adFree becomes true by default
-      } : u));
-      if (currentUser?.id === id) {
-          setCurrentUser(prev => {
-             if (!prev) return null;
-             const isNowPremium = prev.subscriptionPlan !== 'premium';
-             return { ...prev, subscriptionPlan: isNowPremium ? 'premium' : 'free', isAdFree: isNowPremium };
-          });
+      if(!supabase) return;
+      const user = users.find(u => u.id === id);
+      if(user) {
+          const newPlan = user.subscriptionPlan === 'premium' ? 'free' : 'premium';
+          const isAdFree = newPlan === 'premium';
+          
+          const { error } = await supabase.from('users').update({ subscriptionPlan: newPlan, isAdFree }).eq('id', id);
+          
+          if(!error) {
+              setUsers(prev => prev.map(u => u.id === id ? { ...u, subscriptionPlan: newPlan, isAdFree } : u));
+              if (currentUser?.id === id) {
+                  setCurrentUser(prev => prev ? ({ ...prev, subscriptionPlan: newPlan, isAdFree }) : null);
+              }
+          }
       }
   };
   
   const toggleUserAdStatus = async (id: string) => {
-      setUsers(prev => prev.map(u => u.id === id ? { ...u, isAdFree: !u.isAdFree } : u));
-      if (currentUser?.id === id) {
-          setCurrentUser(prev => prev ? ({ ...prev, isAdFree: !prev.isAdFree }) : null);
+      if(!supabase) return;
+      const user = users.find(u => u.id === id);
+      if(user) {
+          const newStatus = !user.isAdFree;
+          const { error } = await supabase.from('users').update({ isAdFree: newStatus }).eq('id', id);
+          if(!error) {
+              setUsers(prev => prev.map(u => u.id === id ? { ...u, isAdFree: newStatus } : u));
+              if (currentUser?.id === id) setCurrentUser(prev => prev ? ({ ...prev, isAdFree: newStatus }) : null);
+          }
       }
   };
 
   const addAdvertisement = async (ad: Advertisement) => {
+      if(!supabase) return;
       const status = currentUser?.id === CHIEF_EDITOR_ID ? ad.status : 'pending';
-      setAdvertisements(prev => [...prev, { ...ad, status }]);
+      const newAd = { ...ad, status };
+      const { error } = await supabase.from('advertisements').insert([newAd]);
+      if(!error) setAdvertisements(prev => [...prev, newAd]);
   };
 
   const updateAdvertisement = async (updatedAd: Advertisement) => {
+      if(!supabase) return;
       const status = currentUser?.id === CHIEF_EDITOR_ID ? updatedAd.status : 'pending';
-      setAdvertisements(prev => prev.map(a => a.id === updatedAd.id ? { ...updatedAd, status } : a));
+      const finalAd = { ...updatedAd, status };
+      const { error } = await supabase.from('advertisements').update(finalAd).eq('id', finalAd.id);
+      if(!error) setAdvertisements(prev => prev.map(a => a.id === updatedAd.id ? finalAd : a));
   };
 
   const deleteAdvertisement = async (id: string) => {
-      setAdvertisements(prev => prev.filter(a => a.id !== id));
+      if(!supabase) return;
+      const { error } = await supabase.from('advertisements').delete().eq('id', id);
+      if(!error) setAdvertisements(prev => prev.filter(a => a.id !== id));
   };
 
   const toggleAdStatus = async (id: string) => {
-      setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: a.status === 'active' ? 'inactive' : 'active' } : a));
+      if(!supabase) return;
+      const ad = advertisements.find(a => a.id === id);
+      if(ad) {
+          const newStatus = ad.status === 'active' ? 'inactive' : 'active';
+          const { error } = await supabase.from('advertisements').update({ status: newStatus }).eq('id', id);
+          if(!error) setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
+      }
   };
 
   const trackAdClick = async (id: string) => {
-      setAdvertisements(prev => prev.map(a => {
-          if (a.id === id && !a.clickedIps.includes(visitorIp)) {
-              return { ...a, clicks: (a.clicks || 0) + 1, clickedIps: [...a.clickedIps, visitorIp] };
+      if(!supabase) return;
+      const ad = advertisements.find(a => a.id === id);
+      if (ad && !ad.clickedIps.includes(visitorIp)) {
+          const newClicks = (ad.clicks || 0) + 1;
+          const newIps = [...ad.clickedIps, visitorIp];
+          const { error } = await supabase.from('advertisements').update({ clicks: newClicks, clickedIps: newIps }).eq('id', id);
+          
+          if(!error) {
+              setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, clicks: newClicks, clickedIps: newIps } : a));
           }
-          return a;
-      }));
+      }
   };
 
   const updateWatermarkSettings = async (settings: WatermarkSettings) => setWatermarkSettings(settings);
 
   const approveContent = async (type: 'article' | 'ad' | 'epaper', id: string) => {
+      if(!supabase) return;
       if (currentUser?.id !== CHIEF_EDITOR_ID) return;
-      if (type === 'article') setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'published' } : a));
-      if (type === 'ad') setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'active' } : a));
-      if (type === 'epaper') setEPaperPages(prev => prev.map(p => p.id === id ? { ...p, status: 'active' } : p));
+      
+      if (type === 'article') {
+          const { error } = await supabase.from('articles').update({ status: 'published' }).eq('id', id);
+          if(!error) setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'published' } : a));
+      }
+      if (type === 'ad') {
+          const { error } = await supabase.from('advertisements').update({ status: 'active' }).eq('id', id);
+          if(!error) setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'active' } : a));
+      }
+      if (type === 'epaper') {
+          const { error } = await supabase.from('epaper_pages').update({ status: 'active' }).eq('id', id);
+          if(!error) setEPaperPages(prev => prev.map(p => p.id === id ? { ...p, status: 'active' } : p));
+      }
   };
 
   const rejectContent = async (type: 'article' | 'ad' | 'epaper', id: string) => {
+      if(!supabase) return;
       if (currentUser?.id !== CHIEF_EDITOR_ID) return;
-      if (type === 'article') setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'draft' } : a));
-      if (type === 'ad') setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'inactive' } : a));
-      if (type === 'epaper') setEPaperPages(prev => prev.filter(p => p.id !== id));
+
+      if (type === 'article') {
+          const { error } = await supabase.from('articles').update({ status: 'draft' }).eq('id', id);
+          if(!error) setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'draft' } : a));
+      }
+      if (type === 'ad') {
+          const { error } = await supabase.from('advertisements').update({ status: 'inactive' }).eq('id', id);
+          if(!error) setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'inactive' } : a));
+      }
+      if (type === 'epaper') {
+          const { error } = await supabase.from('epaper_pages').delete().eq('id', id);
+          if(!error) setEPaperPages(prev => prev.filter(p => p.id !== id));
+      }
   };
 
   const addComment = async (articleId: string, content: string) => {
-      if (!currentUser) return;
+      if (!currentUser || !supabase) return;
       const newComment: Comment = {
           id: Date.now().toString(),
           articleId,
@@ -557,58 +673,68 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           likedBy: [],
           dislikedBy: []
       };
-      setComments(prev => [newComment, ...prev]);
+      
+      const { error } = await supabase.from('comments').insert([newComment]);
+      if(!error) setComments(prev => [newComment, ...prev]);
   };
 
   const voteComment = async (commentId: string, type: 'like' | 'dislike') => {
-      if (!currentUser) return; 
+      if (!currentUser || !supabase) return; 
       const userId = currentUser.id;
+      const comment = comments.find(c => c.id === commentId);
+      if(!comment) return;
       
-      setComments(prev => prev.map(c => {
-          if (c.id !== commentId) return c;
+      const hasLiked = comment.likedBy.includes(userId);
+      const hasDisliked = comment.dislikedBy.includes(userId);
+      
+      let newLikes = comment.likes;
+      let newDislikes = comment.dislikes;
+      let newLikedBy = [...comment.likedBy];
+      let newDislikedBy = [...comment.dislikedBy];
 
-          const hasLiked = c.likedBy.includes(userId);
-          const hasDisliked = c.dislikedBy.includes(userId);
-          
-          let newLikes = c.likes;
-          let newDislikes = c.dislikes;
-          let newLikedBy = [...c.likedBy];
-          let newDislikedBy = [...c.dislikedBy];
-
-          if (type === 'like') {
-              if (hasLiked) {
-                  newLikes--;
-                  newLikedBy = newLikedBy.filter(id => id !== userId);
-              } else {
-                  newLikes++;
-                  newLikedBy.push(userId);
-                  if (hasDisliked) {
-                      newDislikes--;
-                      newDislikedBy = newDislikedBy.filter(id => id !== userId);
-                  }
-              }
+      if (type === 'like') {
+          if (hasLiked) {
+              newLikes--;
+              newLikedBy = newLikedBy.filter(id => id !== userId);
           } else {
+              newLikes++;
+              newLikedBy.push(userId);
               if (hasDisliked) {
                   newDislikes--;
                   newDislikedBy = newDislikedBy.filter(id => id !== userId);
-              } else {
-                  newDislikes++;
-                  newDislikedBy.push(userId);
-                  if (hasLiked) {
-                      newLikes--;
-                      newLikedBy = newLikedBy.filter(id => id !== userId);
-                  }
               }
           }
-          return { ...c, likes: newLikes, dislikes: newDislikes, likedBy: newLikedBy, dislikedBy: newDislikedBy };
-      }));
+      } else {
+          if (hasDisliked) {
+              newDislikes--;
+              newDislikedBy = newDislikedBy.filter(id => id !== userId);
+          } else {
+              newDislikes++;
+              newDislikedBy.push(userId);
+              if (hasLiked) {
+                  newLikes--;
+                  newLikedBy = newLikedBy.filter(id => id !== userId);
+              }
+          }
+      }
+
+      const { error } = await supabase.from('comments').update({ 
+          likes: newLikes, dislikes: newDislikes, likedBy: newLikedBy, dislikedBy: newDislikedBy 
+      }).eq('id', commentId);
+
+      if(!error) {
+        setComments(prev => prev.map(c => c.id === commentId ? { ...c, likes: newLikes, dislikes: newDislikes, likedBy: newLikedBy, dislikedBy: newDislikedBy } : c));
+      }
   };
 
   const deleteComment = async (commentId: string) => {
-      setComments(prev => prev.filter(c => c.id !== commentId));
+      if(!supabase) return;
+      const { error } = await supabase.from('comments').delete().eq('id', commentId);
+      if(!error) setComments(prev => prev.filter(c => c.id !== commentId));
   };
 
   const sendContactMessage = async (name: string, email: string, subject: string, message: string) => {
+      if(!supabase) return;
       const newMessage: ContactMessage = {
           id: Date.now().toString(),
           name,
@@ -618,23 +744,32 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           timestamp: Date.now(),
           read: false
       };
-      setContactMessages(prev => [newMessage, ...prev]);
+      const { error } = await supabase.from('messages').insert([newMessage]);
+      if(!error) setContactMessages(prev => [newMessage, ...prev]);
   };
 
   const markMessageAsRead = async (id: string) => {
-      setContactMessages(prev => prev.map(msg => msg.id === id ? { ...msg, read: true } : msg));
+      if(!supabase) return;
+      const { error } = await supabase.from('messages').update({ read: true }).eq('id', id);
+      if(!error) setContactMessages(prev => prev.map(msg => msg.id === id ? { ...msg, read: true } : msg));
   };
 
   const deleteMessage = async (id: string) => {
-      setContactMessages(prev => prev.filter(msg => msg.id !== id));
+      if(!supabase) return;
+      const { error } = await supabase.from('messages').delete().eq('id', id);
+      if(!error) setContactMessages(prev => prev.filter(msg => msg.id !== id));
   };
 
   const addClassified = async (classified: Classified) => {
-      setClassifieds(prev => [classified, ...prev]);
+      if(!supabase) return;
+      const { error } = await supabase.from('classifieds').insert([classified]);
+      if(!error) setClassifieds(prev => [classified, ...prev]);
   };
 
   const deleteClassified = async (id: string) => {
-      setClassifieds(prev => prev.filter(c => c.id !== id));
+      if(!supabase) return;
+      const { error } = await supabase.from('classifieds').delete().eq('id', id);
+      if(!error) setClassifieds(prev => prev.filter(c => c.id !== id));
   };
 
   return (
