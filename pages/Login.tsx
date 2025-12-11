@@ -1,0 +1,276 @@
+
+import React, { useState } from 'react';
+import { useNews } from '../context/NewsContext';
+import { useNavigate, Link } from 'react-router-dom';
+import { Lock, UserCheck, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
+import { UserRole } from '../types';
+
+export const Login: React.FC = () => {
+  const [loginType, setLoginType] = useState<UserRole>('publisher');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  // Recovery State
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [recoveryStep, setRecoveryStep] = useState(1);
+  const [recoveryIdentifier, setRecoveryIdentifier] = useState('');
+  const [verificationCode, setVerificationCode] = useState(''); 
+  const [newPassword, setNewPassword] = useState('');
+
+  const { login, initiateRecovery, completeRecovery, emailSettings } = useNews();
+  const navigate = useNavigate();
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    
+    try {
+        const user = await login(email, password, loginType);
+        if (user) {
+            if (user.role === 'admin' || user.role === 'publisher') {
+                navigate('/admin');
+            } else {
+                navigate('/');
+            }
+        } else {
+            setError(`Invalid credentials, incorrect role, or account suspended/pending approval.`);
+        }
+    } catch (err) {
+        setError('Login failed due to a network error.');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleRecoveryStart = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+      
+      const result = await initiateRecovery(recoveryIdentifier);
+
+      if (result) {
+          alert(`(SIMULATION EMAIL sent to ${emailSettings.senderEmail})\n\n${result.message}`);
+          setRecoveryStep(2);
+      } else {
+          setError('Account not found. Please check your email or username.');
+      }
+  };
+
+  const handleRecoveryComplete = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError('');
+
+      if (newPassword.length < 6) {
+          setError('New password must be at least 6 characters.');
+          return;
+      }
+
+      const success = await completeRecovery(recoveryIdentifier, verificationCode, newPassword);
+      if (success) {
+          alert('Password reset successfully! You can now login with your new password.');
+          setIsRecovering(false);
+          setRecoveryStep(1);
+          setRecoveryIdentifier('');
+          setVerificationCode('');
+          setNewPassword('');
+          if (recoveryIdentifier.includes('@')) setEmail(recoveryIdentifier);
+      } else {
+          setError('Invalid verification code or code expired. Please try again.');
+      }
+  };
+
+  const toggleRecovery = () => {
+      setIsRecovering(!isRecovering);
+      setError('');
+      setRecoveryStep(1);
+      setRecoveryIdentifier('');
+  };
+
+  return (
+    <div className="min-h-[70vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-paper">
+      <div className="max-w-md w-full bg-white shadow-2xl border-t-4 border-gold relative overflow-hidden transition-all duration-300">
+        
+        {!isRecovering && (
+            <div className="flex w-full border-b border-gray-200">
+            <button 
+                onClick={() => { setLoginType('publisher'); setError(''); }}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2
+                ${loginType === 'publisher' ? 'bg-white text-ink border-b-2 border-gold' : 'bg-gray-50 text-gray-400 hover:text-ink'}`}
+            >
+                <UserCheck size={16} /> Publisher
+            </button>
+            <button 
+                onClick={() => { setLoginType('admin'); setError(''); }}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2
+                ${loginType === 'admin' ? 'bg-white text-ink border-b-2 border-ink' : 'bg-gray-50 text-gray-400 hover:text-ink'}`}
+            >
+                <ShieldCheck size={16} /> Admin
+            </button>
+            </div>
+        )}
+
+        <div className="p-10">
+          
+          {isRecovering ? (
+            <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+                <div className="h-12 w-12 bg-red-100 text-red-600 flex items-center justify-center rounded-full mb-4">
+                    <KeyRound size={24} />
+                </div>
+                <h2 className="text-center text-2xl font-serif font-bold text-gray-900">
+                    {recoveryStep === 1 ? 'Recover Password' : 'Set New Password'}
+                </h2>
+                <p className="mt-2 text-center text-sm text-gray-600 mb-6">
+                    {recoveryStep === 1 
+                        ? 'Enter your email or username to search for your account.' 
+                        : 'Enter the verification code sent to your email.'}
+                </p>
+
+                {error && (
+                    <div className="w-full text-red-600 text-sm text-center font-bold bg-red-50 p-3 border border-red-100 rounded mb-4">
+                        {error}
+                    </div>
+                )}
+
+                {recoveryStep === 1 ? (
+                     <form className="w-full space-y-6" onSubmit={handleRecoveryStart}>
+                        <div>
+                            <input
+                                type="text"
+                                required
+                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
+                                placeholder="Email or Username"
+                                value={recoveryIdentifier}
+                                onChange={(e) => setRecoveryIdentifier(e.target.value)}
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-ink hover:bg-gray-800 transition-colors"
+                        >
+                            Find Account
+                        </button>
+                     </form>
+                ) : (
+                    <form className="w-full space-y-6" onSubmit={handleRecoveryComplete}>
+                        <div>
+                            <input
+                                type="text"
+                                required
+                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t focus:outline-none focus:ring-gold focus:border-gold sm:text-sm"
+                                placeholder="Verification Code or Master Key"
+                                value={verificationCode}
+                                onChange={(e) => setVerificationCode(e.target.value)}
+                            />
+                            <p className="text-[10px] text-gray-400 px-1 py-1">If you are the Chief Editor and forgot your password, enter your Backup Master Key here.</p>
+                            <input
+                                type="password"
+                                required
+                                className="appearance-none block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b focus:outline-none focus:ring-gold focus:border-gold sm:text-sm border-t-0"
+                                placeholder="New Password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 transition-colors"
+                        >
+                            Reset Password
+                        </button>
+                    </form>
+                )}
+
+                <button 
+                    onClick={toggleRecovery}
+                    className="mt-6 flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-ink transition-colors"
+                >
+                    <ArrowLeft size={14} /> Back to Login
+                </button>
+            </div>
+          ) : (
+            <>
+                <div className="flex flex-col items-center">
+                    <div className={`h-12 w-12 text-white flex items-center justify-center rounded-full mb-4 transition-colors duration-300 ${loginType === 'admin' ? 'bg-ink' : 'bg-gold'}`}>
+                    <Lock size={24} />
+                    </div>
+                    <h2 className="text-center text-3xl font-serif font-bold text-gray-900">
+                    {loginType === 'admin' ? 'Administrative Access' : 'Publisher Portal'}
+                    </h2>
+                    <p className="mt-2 text-center text-sm text-gray-600">
+                    {loginType === 'admin' ? 'Secure Login for Staff' : 'Manage your articles and content'}
+                    </p>
+                </div>
+
+                <form className="mt-8 space-y-6" onSubmit={handleLoginSubmit}>
+                    <div className="rounded-md shadow-sm -space-y-px">
+                    <div>
+                        <input
+                        type="email"
+                        required
+                        className={`appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:z-10 sm:text-sm
+                            ${loginType === 'admin' ? 'focus:ring-ink focus:border-ink' : 'focus:ring-gold focus:border-gold'}`}
+                        placeholder={`${loginType === 'admin' ? 'Admin' : 'Publisher'} Email`}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <input
+                        type="password"
+                        required
+                        className={`appearance-none rounded-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:z-10 sm:text-sm
+                            ${loginType === 'admin' ? 'focus:ring-ink focus:border-ink' : 'focus:ring-gold focus:border-gold'}`}
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        />
+                    </div>
+                    </div>
+
+                    
+                    <div className="flex justify-end">
+                        <button 
+                            type="button" 
+                            onClick={toggleRecovery}
+                            className="text-xs font-bold text-gray-500 hover:text-ink hover:underline"
+                        >
+                            Forgot Password?
+                        </button>
+                    </div>
+
+                    {error && (
+                    <div className="text-red-600 text-sm text-center font-bold bg-red-50 p-3 border border-red-100 rounded">
+                        {error}
+                    </div>
+                    )}
+
+                    <div>
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className={`group relative w-full flex justify-center py-3 px-4 border border-transparent text-base font-black uppercase tracking-widest text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors shadow-lg
+                        ${loginType === 'admin' 
+                            ? 'bg-ink hover:bg-gray-800 focus:ring-ink' 
+                            : 'bg-gold hover:bg-gold-dark focus:ring-gold'} ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    >
+                        {loading ? 'Authenticating...' : `Sign In as ${loginType}`}
+                    </button>
+                    </div>
+                    
+                    {loginType === 'publisher' && (
+                    <div className="text-center mt-4 pt-4 border-t border-gray-100">
+                        <span className="text-sm text-gray-600">Not a registered publisher? </span>
+                        <Link to="/publisher/register" className="text-sm font-bold text-gold-dark hover:underline">Apply here</Link>
+                    </div>
+                    )}
+                </form>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
