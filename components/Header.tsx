@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, Search, X, Lock, Newspaper, User as UserIcon, LogOut, LogIn, Flame, Clock, Briefcase, Home, Sparkles } from 'lucide-react';
 import { useNews } from '../context/NewsContext';
+import { WeatherWidget } from './WeatherWidget';
 
 export const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -124,7 +125,7 @@ export const Header: React.FC = () => {
       </div>
 
       {/* Main Branding - Compact Version */}
-      <div className="w-full py-2 md:py-4 flex flex-col items-center justify-center relative">
+      <div className="w-full py-2 md:py-4 flex flex-col items-center justify-center relative px-2">
         <div className="absolute left-4 top-1/2 -translate-y-1/2 hidden md:block w-64">
              <div className="relative">
                 <input 
@@ -136,14 +137,17 @@ export const Header: React.FC = () => {
              </div>
         </div>
 
-        {!currentUser && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:block">
-                <Link to="/subscribe" className="flex flex-col items-center justify-center bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded shadow-md transform hover:scale-105 transition-all">
+        {/* Right Side Tools: Weather + Subscribe */}
+        <div className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
+            <WeatherWidget />
+            
+            {!currentUser && (
+                <Link to="/subscribe" className="hidden md:flex flex-col items-center justify-center bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded shadow-md transform hover:scale-105 transition-all">
                     <span className="text-[8px] uppercase font-bold tracking-widest leading-none">Subscribe</span>
                     <span className="text-sm font-black leading-none">NOW</span>
                 </Link>
-            </div>
-        )}
+            )}
+        </div>
 
         <div className="flex items-center gap-4">
             <Link to="/" className="text-center group">
@@ -155,7 +159,7 @@ export const Header: React.FC = () => {
         
         <div className="flex items-center justify-center gap-4 mt-1">
              <div className="h-[1px] w-8 bg-gray-400"></div>
-             <p className="text-[8px] md:text-[10px] font-sans tracking-[0.2em] text-gray-500 uppercase">Est. 2023 &bull; Global Edition</p>
+             <p className="text-[8px] md:text-[10px] font-sans tracking-[0.2em] text-gray-500 uppercase">Est. 2025 &bull; Global Edition</p>
              <div className="h-[1px] w-8 bg-gray-400"></div>
         </div>
       </div>

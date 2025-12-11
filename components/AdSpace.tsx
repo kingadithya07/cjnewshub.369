@@ -1,5 +1,4 @@
 
-
 import React, { useMemo } from 'react';
 import { AdSize } from '../types';
 import { useNews } from '../context/NewsContext';
@@ -17,9 +16,11 @@ export const AdSpace: React.FC<AdSpaceProps> = ({ size, className = '', label = 
   // Logic to hide ads
   // 1. Global switch is OFF
   // 2. User is Premium
+  // 3. User has isAdFree flag set manually
   const shouldShowAds = useMemo(() => {
       if (!adSettings.enableAdsGlobally) return false;
       if (currentUser?.subscriptionPlan === 'premium') return false;
+      if (currentUser?.isAdFree) return false;
       return true;
   }, [adSettings, currentUser]);
 

@@ -45,11 +45,13 @@ interface NewsContextType {
   deleteCategory: (category: string) => Promise<void>;
   addEPaperPage: (page: EPaperPage) => Promise<void>;
   deleteEPaperPage: (id: string) => Promise<void>;
+  deleteAllEPaperPages: () => Promise<void>;
   addClipping: (clipping: Clipping) => Promise<void>;
   deleteClipping: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   toggleUserStatus: (id: string) => Promise<void>;
   toggleUserSubscription: (id: string) => Promise<void>; 
+  toggleUserAdStatus: (id: string) => Promise<void>;
   addAdvertisement: (ad: Advertisement) => Promise<void>;
   updateAdvertisement: (ad: Advertisement) => Promise<void>;
   deleteAdvertisement: (id: string) => Promise<void>;
@@ -366,15 +368,34 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const dailyVisits = Array.from({ length: 7 }, (_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - (6 - i));
-          const baseDaily = totalViews / 30; 
-          const randomFactor = 0.8 + Math.random() * 0.4; 
+          
+          // If no views, return true 0
+          if (totalViews === 0) {
+              return {
+                  date: d.toLocaleDateString('en-US', { weekday: 'short' }),
+                  visits: 0
+              };
+          }
+
+          // Simulation logic based on actual view count
+          // Distribute roughly 15% of total views per day with some randomness
+          const baseDaily = totalViews / 7; 
+          const randomFactor = 0.5 + Math.random() * 1.0; 
           return {
               date: d.toLocaleDateString('en-US', { weekday: 'short' }),
-              visits: Math.max(10, Math.round(baseDaily * randomFactor))
+              visits: Math.round(baseDaily * randomFactor)
           };
       });
 
-      const geoSources = [
+      // Geo Sources - Return 0 percentages if no traffic
+      const geoSources = totalViews === 0 ? [
+          { country: 'United States', percentage: 0 },
+          { country: 'United Kingdom', percentage: 0 },
+          { country: 'India', percentage: 0 },
+          { country: 'Canada', percentage: 0 },
+          { country: 'Germany', percentage: 0 },
+          { country: 'Other', percentage: 0 },
+      ] : [
           { country: 'United States', percentage: 42 },
           { country: 'United Kingdom', percentage: 18 },
           { country: 'India', percentage: 12 },
@@ -433,6 +454,10 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setEPaperPages(prev => prev.filter(p => p.id !== id));
   };
 
+  const deleteAllEPaperPages = async () => {
+    setEPaperPages([]);
+  };
+
   const addClipping = async (clipping: Clipping) => {
     const finalClipping = { ...clipping, userId: currentUser?.id };
     setClippings(prev => [finalClipping, ...prev]);
@@ -453,9 +478,24 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const toggleUserSubscription = async (id: string) => {
-      setUsers(prev => prev.map(u => u.id === id ? { ...u, subscriptionPlan: u.subscriptionPlan === 'premium' ? 'free' : 'premium' } : u));
+      setUsers(prev => prev.map(u => u.id === id ? { 
+          ...u, 
+          subscriptionPlan: u.subscriptionPlan === 'premium' ? 'free' : 'premium',
+          isAdFree: u.subscriptionPlan !== 'premium' // If moving to premium, adFree becomes true by default
+      } : u));
       if (currentUser?.id === id) {
-          setCurrentUser(prev => prev ? ({ ...prev, subscriptionPlan: prev.subscriptionPlan === 'premium' ? 'free' : 'premium' }) : null);
+          setCurrentUser(prev => {
+             if (!prev) return null;
+             const isNowPremium = prev.subscriptionPlan !== 'premium';
+             return { ...prev, subscriptionPlan: isNowPremium ? 'premium' : 'free', isAdFree: isNowPremium };
+          });
+      }
+  };
+  
+  const toggleUserAdStatus = async (id: string) => {
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, isAdFree: !u.isAdFree } : u));
+      if (currentUser?.id === id) {
+          setCurrentUser(prev => prev ? ({ ...prev, isAdFree: !prev.isAdFree }) : null);
       }
   };
 
@@ -635,11 +675,13 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       deleteCategory,
       addEPaperPage,
       deleteEPaperPage,
+      deleteAllEPaperPages,
       addClipping,
       deleteClipping,
       deleteUser,
       toggleUserStatus,
       toggleUserSubscription,
+      toggleUserAdStatus,
       addAdvertisement,
       updateAdvertisement,
       deleteAdvertisement,

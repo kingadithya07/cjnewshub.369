@@ -1,7 +1,8 @@
+
 import React, { useRef, useState, useMemo } from 'react';
 import Cropper from 'react-cropper';
 import { useNews } from '../context/NewsContext';
-import { Download, Scissors, X, ChevronLeft, ChevronRight, ArrowLeft, Calendar, ZoomIn, ZoomOut, Maximize, Share2, Check, Lock } from 'lucide-react';
+import { Download, Scissors, X, ChevronLeft, ChevronRight, ArrowLeft, Calendar, ZoomIn, ZoomOut, Maximize, Share2, Check, Lock, LayoutGrid, Eye } from 'lucide-react';
 import { Clipping } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { AdSpace } from '../components/AdSpace';
@@ -25,6 +26,9 @@ export const EPaper: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
+  // View Mode State: 'grid' (all pages) or 'single' (focused page)
+  const [viewMode, setViewMode] = useState<'grid' | 'single'>('grid');
+
   // Viewer State
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isCropping, setIsCropping] = useState(false);
@@ -36,12 +40,8 @@ export const EPaper: React.FC = () => {
   const navigate = useNavigate();
   const cropperRef = useRef<any>(null);
 
-  // Filter clippings for current user if logged in, otherwise show local session clippings (default behavior of context)
-  // But context behavior for 'clippings' is global localStorage. 
-  // Improvement: Filter visual list by user ownership if strictly required, but for now we show all local.
-  // Actually, let's filter:
   const myClippings = useMemo(() => {
-      if (!currentUser) return clippings.filter(c => !c.userId); // Show anonymous clips? Or none? Let's show all for now or filter by 'me'.
+      if (!currentUser) return clippings.filter(c => !c.userId); 
       return clippings.filter(c => c.userId === currentUser.id || !c.userId); 
   }, [clippings, currentUser]);
 
@@ -73,7 +73,21 @@ export const EPaper: React.FC = () => {
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       setSelectedDate(e.target.value);
-      setCurrentPageIndex(0); // Reset to cover page when changing dates
+      setCurrentPageIndex(0);
+      setViewMode('grid'); // Reset to grid on date change
+      setIsCropping(false);
+      setZoomLevel(1);
+  };
+
+  const handlePageClick = (index: number) => {
+      setCurrentPageIndex(index);
+      setViewMode('single');
+      setZoomLevel(1);
+      setIsCropping(false);
+  };
+
+  const handleBackToGrid = () => {
+      setViewMode('grid');
       setIsCropping(false);
       setZoomLevel(1);
   };
@@ -265,7 +279,16 @@ export const EPaper: React.FC = () => {
                 <span className="hidden md:inline text-xs font-bold uppercase tracking-widest">Exit</span>
             </button>
 
-            <h2 className="font-serif text-lg md:text-xl font-bold text-gold">E-PAPER ARCHIVE</h2>
+            {viewMode === 'single' && (
+                <button 
+                    onClick={handleBackToGrid} 
+                    className="flex items-center gap-2 bg-gray-700 hover:bg-gold hover:text-ink text-white px-3 py-1.5 rounded-sm transition-colors text-xs font-bold uppercase tracking-widest mr-4"
+                >
+                    <LayoutGrid size={16} /> Grid View
+                </button>
+            )}
+
+            <h2 className="hidden lg:block font-serif text-lg md:text-xl font-bold text-gold">E-PAPER ARCHIVE</h2>
         </div>
 
         {/* Center: Date Selector */}
@@ -284,8 +307,8 @@ export const EPaper: React.FC = () => {
         {/* Right: Tools & Page Info */}
         <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
              
-            {/* Zoom Controls (Only visible when NOT cropping) */}
-            {!isCropping && currentIssuePages.length > 0 && (
+            {/* Zoom Controls (Only visible in SINGLE VIEW and NOT cropping) */}
+            {viewMode === 'single' && !isCropping && currentIssuePages.length > 0 && (
                 <div className="flex items-center bg-gray-700 rounded mr-2">
                     <button onClick={handleZoomOut} className="p-2 hover:text-gold" title="Zoom Out"><ZoomOut size={16}/></button>
                     <span className="text-xs w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
@@ -294,7 +317,8 @@ export const EPaper: React.FC = () => {
                 </div>
             )}
 
-            {!isCropping && currentIssuePages.length > 0 && (
+            {/* Crop Toggle (Only in SINGLE VIEW) */}
+            {viewMode === 'single' && !isCropping && currentIssuePages.length > 0 && (
                 <button 
                     onClick={() => {
                         setIsCropping(true);
@@ -330,10 +354,10 @@ export const EPaper: React.FC = () => {
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
         {/* Main Viewer */}
-        <div className="flex-1 bg-[#555] relative flex items-center justify-center overflow-hidden p-0 min-h-[50vh]">
+        <div className="flex-1 bg-[#555] relative overflow-hidden p-0 min-h-[50vh]">
             
             {currentIssuePages.length === 0 ? (
-                 <div className="text-center text-gray-300">
+                 <div className="h-full flex flex-col items-center justify-center text-center text-gray-300">
                     <Calendar size={48} className="mx-auto mb-4 text-gray-400 opacity-50" />
                     <h3 className="text-xl font-bold font-serif mb-2">No Issue Found</h3>
                     <p className="text-sm">There is no E-Paper edition available for {formatDateDisplay(selectedDate)}.</p>
@@ -341,57 +365,94 @@ export const EPaper: React.FC = () => {
                  </div>
             ) : (
                 <>
-                    {/* Navigation Buttons (Overlay) */}
-                    {!isCropping && (
-                        <>
-                            <button 
-                                onClick={handlePrev} 
-                                disabled={currentPageIndex === 0}
-                                className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-gold disabled:opacity-30 disabled:hover:bg-black/50 transition-all"
-                            >
-                                <ChevronLeft size={32} />
-                            </button>
-                            <button 
-                                onClick={handleNext} 
-                                disabled={currentPageIndex === currentIssuePages.length - 1}
-                                className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-gold disabled:opacity-30 disabled:hover:bg-black/50 transition-all"
-                            >
-                                <ChevronRight size={32} />
-                            </button>
-                        </>
+                    {/* --- GRID VIEW MODE --- */}
+                    {viewMode === 'grid' && (
+                        <div className="h-full overflow-y-auto p-8 bg-[#444]">
+                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
+                                 {currentIssuePages.map((page, index) => (
+                                     <div 
+                                        key={page.id} 
+                                        onClick={() => handlePageClick(index)}
+                                        className="group cursor-pointer flex flex-col items-center"
+                                     >
+                                         <div className="relative shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 border-4 border-transparent hover:border-gold bg-white w-full aspect-[3/4.2]">
+                                             <img 
+                                                src={page.imageUrl} 
+                                                alt={`Page ${page.pageNumber}`} 
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                             />
+                                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                                 <div className="opacity-0 group-hover:opacity-100 bg-ink/80 text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-widest transform translate-y-2 group-hover:translate-y-0 transition-all flex items-center gap-2">
+                                                     <Eye size={12} /> Read
+                                                 </div>
+                                             </div>
+                                         </div>
+                                         <span className="mt-3 text-white text-sm font-bold font-serif bg-black/30 px-3 py-0.5 rounded-full">
+                                             Page {page.pageNumber}
+                                         </span>
+                                     </div>
+                                 ))}
+                             </div>
+                        </div>
                     )}
 
-                    {isCropping ? (
-                        <div className="w-full h-full bg-black p-4">
-                            <Cropper
-                                src={currentPage.imageUrl}
-                                style={{ height: '100%', width: '100%' }}
-                                initialAspectRatio={NaN} // Free crop
-                                guides={true}
-                                ref={cropperRef}
-                                viewMode={1}
-                                dragMode="move"
-                                background={false}
-                                autoCropArea={0.5}
-                                checkCrossOrigin={true} 
-                            />
-                        </div>
-                    ) : (
-                        <div className="w-full h-full overflow-auto flex items-center justify-center bg-[#444] p-8">
-                            <div 
-                                style={{ 
-                                    transform: `scale(${zoomLevel})`, 
-                                    transformOrigin: 'top center',
-                                    transition: 'transform 0.2s ease-out'
-                                }}
-                                className="shadow-2xl"
-                            >
-                                <img 
-                                    src={currentPage.imageUrl} 
-                                    alt={`Page ${currentPage.pageNumber}`} 
-                                    className="max-w-full max-h-[85vh] object-contain border-2 border-gray-700 bg-white"
-                                />
-                            </div>
+                    {/* --- SINGLE VIEW MODE --- */}
+                    {viewMode === 'single' && (
+                        <div className="relative w-full h-full flex items-center justify-center bg-[#444] p-0 md:p-8">
+                            {/* Navigation Buttons (Overlay) */}
+                            {!isCropping && (
+                                <>
+                                    <button 
+                                        onClick={handlePrev} 
+                                        disabled={currentPageIndex === 0}
+                                        className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-gold disabled:opacity-30 disabled:hover:bg-black/50 transition-all"
+                                    >
+                                        <ChevronLeft size={32} />
+                                    </button>
+                                    <button 
+                                        onClick={handleNext} 
+                                        disabled={currentPageIndex === currentIssuePages.length - 1}
+                                        className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-gold disabled:opacity-30 disabled:hover:bg-black/50 transition-all"
+                                    >
+                                        <ChevronRight size={32} />
+                                    </button>
+                                </>
+                            )}
+
+                            {isCropping ? (
+                                <div className="w-full h-full bg-black p-4 z-20">
+                                    <Cropper
+                                        src={currentPage.imageUrl}
+                                        style={{ height: '100%', width: '100%' }}
+                                        initialAspectRatio={NaN} // Free crop
+                                        guides={true}
+                                        ref={cropperRef}
+                                        viewMode={1}
+                                        dragMode="move"
+                                        background={false}
+                                        autoCropArea={0.5}
+                                        checkCrossOrigin={true} 
+                                    />
+                                </div>
+                            ) : (
+                                <div className="w-full h-full overflow-auto flex items-center justify-center">
+                                    <div 
+                                        style={{ 
+                                            transform: `scale(${zoomLevel})`, 
+                                            transformOrigin: 'top center',
+                                            transition: 'transform 0.2s ease-out'
+                                        }}
+                                        className="shadow-2xl"
+                                    >
+                                        <img 
+                                            src={currentPage.imageUrl} 
+                                            alt={`Page ${currentPage.pageNumber}`} 
+                                            className="max-w-full max-h-[85vh] object-contain border-2 border-gray-700 bg-white"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </>
@@ -427,7 +488,7 @@ export const EPaper: React.FC = () => {
 
                     {myClippings.length === 0 ? (
                         <div className="text-gray-500 text-xs italic text-center mt-4">
-                            Use the scissor tool to save clips from the paper.
+                            Use the scissor tool in single view to save clips.
                         </div>
                     ) : (
                         <div className="space-y-4">

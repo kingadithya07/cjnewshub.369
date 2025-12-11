@@ -4,10 +4,11 @@ import { useNews } from '../context/NewsContext';
 import { AdSpace } from '../components/AdSpace';
 import { AdSize, Classified } from '../types';
 import { useNavigate, Link } from 'react-router-dom';
-import { PlayCircle, Clock, ArrowRight, Eye, ChevronLeft, ChevronRight, Zap, Briefcase, TrendingUp } from 'lucide-react';
+import { PlayCircle, Clock, ArrowRight, Eye, ChevronLeft, ChevronRight, Zap, Briefcase, TrendingUp, User } from 'lucide-react';
+import { WeatherWidget } from '../components/WeatherWidget';
 
 export const Home: React.FC = () => {
-  const { articles, currentUser, classifieds } = useNews();
+  const { articles, currentUser, classifieds, users } = useNews();
   const navigate = useNavigate();
   
   // State for Slider
@@ -28,6 +29,11 @@ export const Home: React.FC = () => {
   const handleArticleClick = (id: string) => {
     // Note: incrementArticleView is handled inside ArticleDetail page on mount
     navigate(`/article/${id}`);
+  };
+
+  // Helper to get author details
+  const getAuthor = (id?: string, name?: string) => {
+      return users.find(u => (id && u.id === id) || (name && u.name === name));
   };
 
   // Auto-slide functionality
@@ -67,59 +73,71 @@ export const Home: React.FC = () => {
                 {/* --- HERO SLIDER --- */}
                 {sliderArticles.length > 0 ? (
                     <div className="relative group w-full aspect-[16/9] md:aspect-[2/1] rounded-2xl overflow-hidden shadow-xl bg-gray-900">
-                        {sliderArticles.map((article, index) => (
-                            <div 
-                                key={article.id}
-                                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out cursor-pointer ${index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
-                                onClick={() => handleArticleClick(article.id)}
-                            >
-                                {article.videoUrl ? (
-                                    <div className="w-full h-full relative">
-                                         <video 
-                                            src={article.videoUrl} 
-                                            poster={article.imageUrl}
-                                            className="w-full h-full object-cover opacity-85"
-                                            muted
-                                            loop
-                                            autoPlay={index === currentSlide}
-                                            onMouseOver={(e) => e.currentTarget.play().catch(() => {})}
-                                            onMouseOut={(e) => e.currentTarget.pause()}
-                                         />
-                                         <div className="absolute top-4 right-4 bg-black/50 p-2 rounded-full pointer-events-none">
-                                             <PlayCircle className="text-white w-6 h-6" />
-                                         </div>
-                                    </div>
-                                ) : (
-                                    <img 
-                                        src={article.imageUrl} 
-                                        alt={article.title} 
-                                        className={`w-full h-full object-cover opacity-90 transition-transform duration-[6000ms] ease-linear ${index === currentSlide ? 'scale-105' : 'scale-100'}`}
-                                    />
-                                )}
-                                {/* Gradient Overlay */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                        {sliderArticles.map((article, index) => {
+                            const author = getAuthor(article.authorId, article.author);
+                            return (
+                                <div 
+                                    key={article.id}
+                                    className={`absolute inset-0 transition-opacity duration-1000 ease-in-out cursor-pointer ${index === currentSlide ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
+                                    onClick={() => handleArticleClick(article.id)}
+                                >
+                                    {article.videoUrl ? (
+                                        <div className="w-full h-full relative">
+                                            <video 
+                                                src={article.videoUrl} 
+                                                poster={article.imageUrl}
+                                                className="w-full h-full object-cover opacity-85"
+                                                muted
+                                                loop
+                                                autoPlay={index === currentSlide}
+                                                onMouseOver={(e) => e.currentTarget.play().catch(() => {})}
+                                                onMouseOut={(e) => e.currentTarget.pause()}
+                                            />
+                                            <div className="absolute top-4 right-4 bg-black/50 p-2 rounded-full pointer-events-none">
+                                                <PlayCircle className="text-white w-6 h-6" />
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <img 
+                                            src={article.imageUrl} 
+                                            alt={article.title} 
+                                            className={`w-full h-full object-cover opacity-90 transition-transform duration-[6000ms] ease-linear ${index === currentSlide ? 'scale-105' : 'scale-100'}`}
+                                        />
+                                    )}
+                                    {/* Gradient Overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
 
-                                {/* Text Content */}
-                                <div className="absolute bottom-0 left-0 w-full p-6 md:p-10 text-white z-20">
-                                    <div className="flex items-center gap-3 mb-3 animate-in slide-in-from-bottom-2 duration-500 delay-100">
-                                        <span className="bg-gold text-ink text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
-                                            {article.category}
-                                        </span>
-                                        <span className="text-xs text-gray-300 font-bold flex items-center gap-1">
-                                            <Clock size={12} /> {article.date}
-                                        </span>
+                                    {/* Text Content */}
+                                    <div className="absolute bottom-0 left-0 w-full p-6 md:p-10 text-white z-20">
+                                        <div className="flex items-center gap-3 mb-3 animate-in slide-in-from-bottom-2 duration-500 delay-100">
+                                            <span className="bg-gold text-ink text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">
+                                                {article.category}
+                                            </span>
+                                            <span className="text-xs text-gray-300 font-bold flex items-center gap-1">
+                                                <Clock size={12} /> {article.date}
+                                            </span>
+                                        </div>
+                                        
+                                        <h2 className="text-2xl md:text-4xl font-serif font-black leading-tight mb-3 drop-shadow-md line-clamp-2 animate-in slide-in-from-bottom-2 duration-500 delay-200">
+                                            {article.title}
+                                        </h2>
+                                        
+                                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-500 delay-300">
+                                            <div className="w-8 h-8 rounded-full overflow-hidden border border-white/30 bg-gray-800">
+                                                {author?.profilePicUrl ? (
+                                                    <img src={author.profilePicUrl} alt={article.author} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={16}/></div>
+                                                )}
+                                            </div>
+                                            <p className="hidden md:block text-gray-200 font-serif text-sm line-clamp-1 max-w-2xl">
+                                                By {article.author}
+                                            </p>
+                                        </div>
                                     </div>
-                                    
-                                    <h2 className="text-2xl md:text-4xl font-serif font-black leading-tight mb-3 drop-shadow-md line-clamp-2 animate-in slide-in-from-bottom-2 duration-500 delay-200">
-                                        {article.title}
-                                    </h2>
-                                    
-                                    <p className="hidden md:block text-gray-200 font-serif text-base line-clamp-2 max-w-2xl mb-4 animate-in slide-in-from-bottom-2 duration-500 delay-300">
-                                        {article.excerpt}
-                                    </p>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
 
                         {/* Navigation Controls */}
                         {sliderArticles.length > 1 && (
@@ -162,20 +180,21 @@ export const Home: React.FC = () => {
                 </div>
 
                 {/* --- MOBILE ONLY: Split View (Latest & Trending Side-by-Side) --- */}
-                <div className="grid grid-cols-2 gap-4 md:hidden border-b border-gray-200 pb-8 mb-8">
+                <div className="grid grid-cols-2 gap-3 md:hidden border-b-4 border-double border-gray-200 pb-8 mb-8">
                     {/* Left Col: Latest */}
-                    <div className="border-r border-gray-200 pr-3">
-                         <h3 className="font-sans font-bold text-sm uppercase mb-4 text-gold-dark flex items-center gap-1 border-b border-gold pb-1">
+                    <div className="border-r border-gray-200 pr-2">
+                         <h3 className="font-sans font-bold text-xs uppercase mb-4 text-gold-dark flex items-center gap-1 border-b border-gold pb-1">
                             <Zap size={14} fill="currentColor"/> Latest
                          </h3>
-                         <div className="space-y-5">
-                            {/* Showing more latest items on mobile here */}
+                         <div className="space-y-6">
                             {publishedArticles.slice(5, 9).map(a => (
                                 <div key={a.id} onClick={() => handleArticleClick(a.id)} className="cursor-pointer group">
-                                    <div className="aspect-video bg-gray-100 mb-2 rounded overflow-hidden shadow-sm">
+                                    <div className="aspect-[4/3] bg-gray-100 mb-2 rounded overflow-hidden shadow-sm relative">
                                         <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
+                                            <span className="text-[8px] font-bold text-white uppercase tracking-wider">{a.category}</span>
+                                        </div>
                                     </div>
-                                    <span className="text-[9px] font-bold text-gold-dark uppercase tracking-wider mb-0.5 block">{a.category}</span>
                                     <h4 className="font-serif font-bold text-xs leading-tight line-clamp-3 text-ink group-hover:text-gold-dark transition-colors">{a.title}</h4>
                                 </div>
                             ))}
@@ -183,18 +202,22 @@ export const Home: React.FC = () => {
                     </div>
 
                     {/* Right Col: Trending */}
-                    <div className="pl-1">
-                         <h3 className="font-sans font-bold text-sm uppercase mb-4 text-ink flex items-center gap-1 border-b border-gray-300 pb-1">
+                    <div className="pl-2">
+                         <h3 className="font-sans font-bold text-xs uppercase mb-4 text-ink flex items-center gap-1 border-b border-gray-300 pb-1">
                             <TrendingUp size={14}/> Trending
                          </h3>
                          <ul className="space-y-4">
                             {trendingArticles.slice(0, 6).map((a, i) => (
                                 <li key={a.id} onClick={() => handleArticleClick(a.id)} className="group border-b border-gray-100 pb-3 last:border-0 cursor-pointer">
-                                    <div className="flex gap-2">
-                                        <span className="text-2xl font-serif font-black text-gray-200 leading-none mt-[-4px]">{i+1}</span>
-                                        <h4 className="font-serif font-bold text-xs leading-tight text-gray-700 line-clamp-3 group-hover:text-gold">{a.title}</h4>
+                                    <div className="flex gap-2 items-start">
+                                        <span className="text-xl font-serif font-black text-gray-200 leading-none mt-[-2px]">{i+1}</span>
+                                        <div>
+                                            <h4 className="font-serif font-bold text-xs leading-tight text-gray-700 line-clamp-3 group-hover:text-gold mb-1">{a.title}</h4>
+                                            <span className="text-[9px] text-gray-400 font-bold bg-gray-50 px-1 rounded flex items-center w-fit gap-1">
+                                                <Eye size={8} /> {a.views}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <span className="text-[9px] text-gray-400 mt-1 block pl-6">{a.views} views</span>
                                 </li>
                             ))}
                          </ul>
@@ -209,41 +232,56 @@ export const Home: React.FC = () => {
                     
                     {latestNewsArticles.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {latestNewsArticles.map(article => (
-                                <article key={article.id} className="flex flex-col gap-3 group">
-                                    <div 
-                                        className="overflow-hidden w-full aspect-video bg-gray-100 relative cursor-pointer rounded-lg shadow-sm"
-                                        onClick={() => handleArticleClick(article.id)}
-                                    >
-                                        {article.videoUrl && (
-                                            <div className="absolute top-2 right-2 z-10 bg-black/50 p-1 rounded-full">
-                                                <PlayCircle className="text-white w-4 h-4" />
-                                            </div>
-                                        )}
-                                        <img 
-                                            src={article.imageUrl} 
-                                            alt={article.title} 
-                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" 
-                                        />
-                                    </div>
-                                    
-                                    <div className="flex flex-col gap-1">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-[10px] font-bold text-gold-dark uppercase tracking-widest truncate max-w-[50%]">{article.category}</span>
-                                            <span className="text-[10px] text-gray-400 whitespace-nowrap">{article.date}</span>
-                                        </div>
-                                        <h3 
-                                            className="text-base font-serif font-bold text-ink leading-snug group-hover:text-gold-dark transition-colors cursor-pointer line-clamp-2"
+                            {latestNewsArticles.map(article => {
+                                const author = getAuthor(article.authorId, article.author);
+                                return (
+                                    <article key={article.id} className="flex flex-col gap-3 group">
+                                        <div 
+                                            className="overflow-hidden w-full aspect-video bg-gray-100 relative cursor-pointer rounded-lg shadow-sm"
                                             onClick={() => handleArticleClick(article.id)}
                                         >
-                                            {article.title}
-                                        </h3>
-                                        <p className="text-xs text-gray-500 font-sans line-clamp-3 leading-relaxed">
-                                            {article.excerpt}
-                                        </p>
-                                    </div>
-                                </article>
-                            ))}
+                                            {article.videoUrl && (
+                                                <div className="absolute top-2 right-2 z-10 bg-black/50 p-1 rounded-full">
+                                                    <PlayCircle className="text-white w-4 h-4" />
+                                                </div>
+                                            )}
+                                            <img 
+                                                src={article.imageUrl} 
+                                                alt={article.title} 
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" 
+                                            />
+                                        </div>
+                                        
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-[10px] font-bold text-gold-dark uppercase tracking-widest truncate max-w-[50%]">{article.category}</span>
+                                                <span className="text-[10px] text-gray-400 whitespace-nowrap">{article.date}</span>
+                                            </div>
+                                            <h3 
+                                                className="text-base font-serif font-bold text-ink leading-snug group-hover:text-gold-dark transition-colors cursor-pointer line-clamp-2"
+                                                onClick={() => handleArticleClick(article.id)}
+                                            >
+                                                {article.title}
+                                            </h3>
+                                            
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <div className="w-5 h-5 rounded-full overflow-hidden bg-gray-200 border border-gray-100">
+                                                    {author?.profilePicUrl ? (
+                                                        <img src={author.profilePicUrl} alt={article.author} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={10}/></div>
+                                                    )}
+                                                </div>
+                                                <span className="text-[10px] font-bold text-gray-500 uppercase">{article.author}</span>
+                                            </div>
+
+                                            <p className="text-xs text-gray-500 font-sans line-clamp-2 leading-relaxed mt-1">
+                                                {article.excerpt}
+                                            </p>
+                                        </div>
+                                    </article>
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="text-center py-10 text-gray-400 italic bg-gray-50 rounded border border-dashed border-gray-200">
@@ -256,6 +294,11 @@ export const Home: React.FC = () => {
             {/* Sidebar (Right 4 cols) */}
             <div className="lg:col-span-4 border-l border-gray-200 pl-0 lg:pl-8 space-y-10">
                 
+                {/* --- WEATHER WIDGET (Sidebar Variant) --- */}
+                <div className="hidden lg:block">
+                    <WeatherWidget variant="sidebar" />
+                </div>
+
                 {/* --- DESKTOP ONLY: Trending / List Widget --- */}
                 <div className="hidden md:block">
                     <h4 className="text-lg font-sans font-bold border-b-2 border-ink pb-2 mb-6 uppercase tracking-wider text-xs flex items-center gap-2">

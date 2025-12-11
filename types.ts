@@ -90,6 +90,7 @@ export interface User {
   ip?: string;
   joinedAt?: string;
   subscriptionPlan?: 'free' | 'premium';
+  isAdFree?: boolean; // Manual override to disable ads
   profilePicUrl?: string;
 }
 

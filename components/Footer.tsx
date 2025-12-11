@@ -18,7 +18,7 @@ export const Footer: React.FC = () => {
         <div className="col-span-1 md:col-span-1">
             <h2 className="text-3xl font-serif font-bold text-white mb-4">CJ<span className="text-gold">NEWS</span>HUB</h2>
             <p className="text-gray-400 text-sm leading-relaxed">
-                Delivering truthful, unbiased, and critical journalism to the global community since 2023. We stand for integrity in the digital age.
+                Delivering truthful, unbiased, and critical journalism to the global community since 2025. We stand for integrity in the digital age.
             </p>
         </div>
         
@@ -68,12 +68,12 @@ export const Footer: React.FC = () => {
         </div>
       </div>
       
-      <div className="max-w-7xl mx-auto px-4 border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-gray-500 font-sans">
+      <div className="max-w-7xl mx-auto px-4 border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-white font-sans">
         <p>&copy; 2025 CJ News Hub. All rights reserved.</p>
-        <div className="flex gap-4 mt-4 md:mt-0">
-            <span>Twitter</span>
-            <span>LinkedIn</span>
-            <span>Facebook</span>
+        <div className="flex gap-4 mt-4 md:mt-0 font-bold">
+            <span className="cursor-pointer hover:text-gold transition-colors">Twitter</span>
+            <span className="cursor-pointer hover:text-gold transition-colors">LinkedIn</span>
+            <span className="cursor-pointer hover:text-gold transition-colors">Facebook</span>
         </div>
       </div>
     </footer>

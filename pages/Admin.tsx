@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNews } from '../context/NewsContext';
 import { Article, EPaperPage, User, Advertisement, AdSize, Classified } from '../types';
-import { Trash2, Upload, FileText, Image as ImageIcon, Sparkles, Video, Save, Edit, CheckCircle, Calendar, Users, Ban, Power, Shield, ShieldAlert, Settings, Mail, DollarSign, CreditCard, Film, Type, X, Megaphone, Star, BarChart3, Inbox, MessageSquare, Tag, Plus, Briefcase, MapPin } from 'lucide-react';
+import { Trash2, Upload, FileText, Image as ImageIcon, Sparkles, Video, Save, Edit, CheckCircle, Calendar, Users, Ban, Power, Shield, ShieldAlert, Settings, Mail, DollarSign, CreditCard, Film, Type, X, Megaphone, Star, BarChart3, Inbox, MessageSquare, Tag, Plus, Briefcase, MapPin, Eye, MonitorOff } from 'lucide-react';
 import { CHIEF_EDITOR_ID } from '../constants';
 import { Link } from 'react-router-dom';
 import { RichTextEditor } from '../components/RichTextEditor';
@@ -11,7 +11,7 @@ import { AnalyticsDashboard } from '../components/AnalyticsDashboard';
 export const Admin: React.FC = () => {
   const { 
       articles, categories, addCategory, deleteCategory, ePaperPages, addArticle, updateArticle, deleteArticle, 
-      addEPaperPage, deleteEPaperPage, currentUser, users, deleteUser, toggleUserStatus, toggleUserSubscription, createAdmin,
+      addEPaperPage, deleteEPaperPage, deleteAllEPaperPages, currentUser, users, deleteUser, toggleUserStatus, toggleUserSubscription, toggleUserAdStatus, createAdmin,
       advertisements, addAdvertisement, updateAdvertisement, deleteAdvertisement, toggleAdStatus,
       watermarkSettings, updateWatermarkSettings, approveContent, rejectContent, recoveryRequests,
       initiateProfileUpdate, completeProfileUpdate, emailSettings, updateEmailSettings,
@@ -23,7 +23,19 @@ export const Admin: React.FC = () => {
   
   // Checks
   const isChiefEditor = currentUser?.id === CHIEF_EDITOR_ID;
-  const canPublish = currentUser?.role === 'admin' || currentUser?.role === 'publisher';
+  const isAdmin = currentUser?.role === 'admin';
+  const isPublisher = currentUser?.role === 'publisher';
+  const canPublish = isAdmin || isPublisher;
+
+  // Filter Articles based on Role
+  const displayedArticles = useMemo(() => {
+      if (isPublisher) {
+          // Publishers only see their own articles
+          return articles.filter(a => a.authorId === currentUser?.id);
+      }
+      // Admins see all articles
+      return articles;
+  }, [articles, currentUser, isPublisher]);
 
   // Article Form State
   const initialFormState: Partial<Article> = {
@@ -169,6 +181,8 @@ export const Admin: React.FC = () => {
   const pendingArticles = articles.filter(a => a.status === 'pending');
   const totalPending = pendingArticles.length; // Simplified for UI
   const subscriberUsers = users.filter(u => u.role === 'subscriber');
+  const publisherUsers = users.filter(u => u.role === 'publisher');
+  const adminUsers = users.filter(u => u.role === 'admin');
 
   // --- FORM HANDLERS ---
   const handleEditClick = (article: Article) => {
@@ -237,8 +251,8 @@ export const Admin: React.FC = () => {
 
       const articleData: Article = {
           id: editingId || Date.now().toString(),
-          title: articleForm.title,
-          excerpt: articleForm.excerpt,
+          title: articleForm.title || '',
+          excerpt: articleForm.excerpt || '',
           content: articleForm.content || '',
           author: articleForm.author || currentUser.name,
           authorId: articleForm.authorId || currentUser.id,
@@ -254,10 +268,10 @@ export const Admin: React.FC = () => {
 
       if (editingId) {
           await updateArticle(articleData);
-          alert(canPublish ? 'Article updated successfully!' : 'Article update submitted for approval.');
+          alert('Article updated successfully!');
       } else {
           await addArticle(articleData);
-          alert(canPublish ? 'Article published successfully!' : 'Article submitted for approval.');
+          alert('Article created successfully!');
       }
       setIsSubmitting(false);
       handleCancelEdit();
@@ -451,8 +465,8 @@ export const Admin: React.FC = () => {
       const newClassified: Classified = {
           id: Date.now().toString(),
           category: classifiedForm.category as any,
-          title: classifiedForm.title,
-          description: classifiedForm.description,
+          title: classifiedForm.title || '',
+          description: classifiedForm.description || '',
           contact: classifiedForm.contact || '',
           location: classifiedForm.location || '',
           imageUrl: classifiedForm.imageUrl,
@@ -494,11 +508,14 @@ export const Admin: React.FC = () => {
             <p className="text-sm text-gray-500 mt-1">
                 Welcome back, <span className="font-bold text-gold-dark">{currentUser.name}</span> 
                 {isChiefEditor && <span className="ml-2 bg-ink text-gold px-2 py-0.5 text-[10px] rounded uppercase">Chief Editor</span>}
+                {isPublisher && <span className="ml-2 bg-gold text-ink px-2 py-0.5 text-[10px] rounded uppercase">Publisher</span>}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 md:gap-4">
               <button onClick={() => setActiveTab('articles')} className={`px-4 md:px-6 py-3 font-bold uppercase text-xs tracking-widest transition-all rounded-sm ${activeTab === 'articles' ? 'bg-ink text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}>Articles</button>
-              {currentUser.role === 'admin' && (
+              
+              {/* ADMIN ONLY TABS */}
+              {isAdmin && (
                 <>
                     <button onClick={() => setActiveTab('epaper')} className={`px-4 md:px-6 py-3 font-bold uppercase text-xs tracking-widest transition-all rounded-sm ${activeTab === 'epaper' ? 'bg-ink text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}>E-Paper</button>
                     <button onClick={() => setActiveTab('publishers')} className={`px-4 md:px-6 py-3 font-bold uppercase text-xs tracking-widest transition-all rounded-sm ${activeTab === 'publishers' ? 'bg-ink text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}>Publishers</button>
@@ -518,9 +535,380 @@ export const Admin: React.FC = () => {
                     )}
                 </>
               )}
+
+              {/* SHARED TABS (Admin & Publisher) */}
                <button onClick={() => setActiveTab('settings')} className={`px-4 md:px-6 py-3 font-bold uppercase text-xs tracking-widest transition-all rounded-sm flex items-center gap-2 ${activeTab === 'settings' ? 'bg-ink text-white shadow-lg' : 'bg-white text-gray-500 border border-gray-200'}`}><Settings size={14}/> Settings</button>
           </div>
       </div>
+
+      {/* --- ARTICLES TAB (Restricted View for Publishers) --- */}
+      {activeTab === 'articles' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Form Section */}
+              <div className="lg:col-span-8 bg-white p-6 shadow-sm border-t-4 border-gold">
+                  <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
+                      <FileText size={20}/> {editingId ? 'Edit Article' : 'New Article'}
+                  </h3>
+                  
+                  <form onSubmit={handleArticleSubmit} className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Title</label>
+                              <input required type="text" className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={articleForm.title} onChange={e => setArticleForm({...articleForm, title: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Category</label>
+                              <select className="w-full border p-3 text-sm outline-none bg-white" value={articleForm.category} onChange={e => setArticleForm({...articleForm, category: e.target.value})}>
+                                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                               <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Featured Image</label>
+                               <div className="flex gap-4 mb-2">
+                                   <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={imageSourceType === 'url'} onChange={() => setImageSourceType('url')} className="accent-gold"/> <span className="text-xs">URL</span></label>
+                                   <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={imageSourceType === 'upload'} onChange={() => setImageSourceType('upload')} className="accent-gold"/> <span className="text-xs">Upload</span></label>
+                               </div>
+                               {imageSourceType === 'url' ? (
+                                   <input type="text" placeholder="https://..." className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={articleForm.imageUrl} onChange={e => setArticleForm({...articleForm, imageUrl: e.target.value})} />
+                               ) : (
+                                   <div className="border border-dashed border-gray-300 p-4 text-center cursor-pointer hover:bg-gray-50 relative">
+                                        <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        <span className="text-xs text-gray-500 flex flex-col items-center gap-1">
+                                            <ImageIcon size={16} /> <span>Choose File</span>
+                                        </span>
+                                   </div>
+                               )}
+                               {articleForm.imageUrl && <img src={articleForm.imageUrl} className="mt-2 w-full h-24 object-cover border bg-gray-50" alt="Preview"/>}
+                          </div>
+
+                          <div>
+                               <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Video (Optional)</label>
+                               <div className="flex gap-4 mb-2">
+                                   <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={videoSourceType === 'url'} onChange={() => setVideoSourceType('url')} className="accent-gold"/> <span className="text-xs">URL</span></label>
+                                   <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={videoSourceType === 'upload'} onChange={() => setVideoSourceType('upload')} className="accent-gold"/> <span className="text-xs">Upload</span></label>
+                               </div>
+                               {videoSourceType === 'url' ? (
+                                   <input type="text" placeholder="https://..." className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={articleForm.videoUrl || ''} onChange={e => setArticleForm({...articleForm, videoUrl: e.target.value})} />
+                               ) : (
+                                   <div className="border border-dashed border-gray-300 p-4 text-center cursor-pointer hover:bg-gray-50 relative">
+                                        <input type="file" accept="video/*" onChange={handleVideoUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        <span className="text-xs text-gray-500 flex flex-col items-center gap-1">
+                                            <Video size={16} /> <span>Choose File</span>
+                                        </span>
+                                   </div>
+                               )}
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Excerpt</label>
+                          <textarea rows={2} required className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={articleForm.excerpt} onChange={e => setArticleForm({...articleForm, excerpt: e.target.value})} />
+                      </div>
+
+                      <div>
+                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Content</label>
+                          <RichTextEditor value={articleForm.content || ''} onChange={(content) => setArticleForm({ ...articleForm, content })} />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div>
+                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Tags (Comma Separated)</label>
+                                <input type="text" placeholder="News, Politics, Local" className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={tagsInput} onChange={e => setTagsInput(e.target.value)} />
+                           </div>
+                           <div className="flex items-center gap-4 pt-6">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input type="checkbox" checked={articleForm.isFeatured || false} onChange={e => setArticleForm({...articleForm, isFeatured: e.target.checked})} className="w-4 h-4 accent-gold" />
+                                    <span className="text-sm font-bold text-gray-700">Feature on Homepage</span>
+                                </label>
+                           </div>
+                      </div>
+
+                      <div className="flex gap-4 pt-4 border-t border-gray-100">
+                          {editingId && (
+                              <button type="button" onClick={handleCancelEdit} className="flex-1 bg-gray-200 text-gray-700 py-3 font-bold uppercase text-xs hover:bg-gray-300 transition-colors">
+                                  Cancel
+                              </button>
+                          )}
+                          <button type="submit" disabled={isSubmitting} className="flex-1 bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors disabled:opacity-70">
+                              {isSubmitting ? 'Saving...' : (editingId ? (isAdmin ? 'Update Article' : 'Submit Update') : (isAdmin ? 'Publish Article' : 'Submit for Review'))}
+                          </button>
+                      </div>
+                  </form>
+              </div>
+
+              {/* List Section - Filtered for Publishers */}
+              <div className="lg:col-span-4 space-y-4">
+                   <div className="bg-white p-6 shadow-sm border border-gray-200">
+                       <h3 className="font-serif font-bold text-lg mb-4 text-gray-700">
+                           {isPublisher ? 'My Articles' : 'Recent Articles'}
+                       </h3>
+                       <div className="space-y-4 max-h-[800px] overflow-y-auto pr-2">
+                           {displayedArticles.length === 0 && <p className="text-gray-500 italic text-sm">No articles found.</p>}
+                           {displayedArticles.map(article => (
+                               <div key={article.id} className={`p-4 border rounded transition-all ${editingId === article.id ? 'border-gold bg-gold/5' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                                   <h4 className="font-bold text-sm text-ink line-clamp-2 mb-1">{article.title}</h4>
+                                   <div className="flex justify-between items-center text-xs text-gray-500 mb-3">
+                                       <span>{article.date}</span>
+                                       <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${article.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                           {article.status}
+                                       </span>
+                                   </div>
+                                   <div className="flex gap-2">
+                                       <button onClick={() => handleEditClick(article)} className="flex-1 py-1.5 bg-gray-100 text-gray-700 text-xs font-bold uppercase rounded hover:bg-gray-200 flex items-center justify-center gap-1">
+                                           <Edit size={12}/> Edit
+                                       </button>
+                                       {/* Only allow delete if Admin, or if it's draft? Keeping simple: Admins can delete. Publishers typically shouldn't hard delete published work without approval, but for simplicity: */}
+                                       <button onClick={() => { if(window.confirm('Delete this article?')) deleteArticle(article.id); }} className="px-3 py-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100">
+                                           <Trash2 size={14} />
+                                       </button>
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- E-PAPER TAB --- */}
+      {activeTab === 'epaper' && isAdmin && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="bg-white p-6 shadow-sm border-t-4 border-gold">
+                   <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
+                       <Upload size={20}/> Upload Page
+                   </h3>
+                   <form onSubmit={handleEPaperSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Issue Date</label>
+                            <input type="date" required className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={ePaperDate} onChange={e => setEPaperDate(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Page Image</label>
+                            <div className="border border-dashed border-gray-300 p-8 text-center cursor-pointer hover:bg-gray-50 relative rounded">
+                                <input type="file" accept="image/*" onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                <div className="flex flex-col items-center gap-2 text-gray-500">
+                                    <Upload size={24} />
+                                    <span className="text-sm font-bold">Click to Upload Page</span>
+                                    <span className="text-xs">(JPG, PNG max 5MB)</span>
+                                </div>
+                            </div>
+                            {ePaperUrl && <img src={ePaperUrl} className="mt-4 w-full h-48 object-contain bg-gray-100 border" alt="Preview" />}
+                        </div>
+                        <button type="submit" className="w-full bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors tracking-widest">
+                            Add Page to Issue
+                        </button>
+                   </form>
+
+                   {/* Watermark Settings */}
+                   {isChiefEditor && (
+                       <div className="mt-8 pt-8 border-t border-gray-200">
+                            <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><Sparkles size={16}/> Watermark Settings</h4>
+                            <form onSubmit={handleWatermarkSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Watermark Text</label>
+                                    <input type="text" className="w-full border p-2 text-sm focus:ring-1 focus:ring-gold outline-none" value={watermarkFormText} onChange={e => setWatermarkFormText(e.target.value)} placeholder="e.g. CJ NEWS HUB" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Logo URL (Optional)</label>
+                                    <div className="flex gap-2">
+                                        <input type="text" className="w-full border p-2 text-sm focus:ring-1 focus:ring-gold outline-none" value={watermarkFormLogo || ''} onChange={e => setWatermarkFormLogo(e.target.value)} placeholder="https://..." />
+                                        <label className="bg-gray-200 px-3 py-2 cursor-pointer hover:bg-gray-300 rounded"><ImageIcon size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleWatermarkLogoUpload}/></label>
+                                    </div>
+                                    {watermarkFormLogo && <img src={watermarkFormLogo} className="mt-2 h-10 object-contain" alt="Watermark Logo" />}
+                                </div>
+                                <button type="submit" className="w-full bg-gray-800 text-white py-2 text-xs font-bold uppercase hover:bg-gray-700">Save Settings</button>
+                            </form>
+                       </div>
+                   )}
+               </div>
+
+               <div className="space-y-6">
+                   <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-serif font-bold text-xl text-gray-700">Current Issue Pages</h3>
+                        {ePaperPages.length > 0 && (
+                            <button 
+                                onClick={() => { if(window.confirm('Are you sure you want to delete ALL pages? This cannot be undone.')) deleteAllEPaperPages(); }}
+                                className="text-red-600 text-xs font-bold uppercase hover:bg-red-50 px-3 py-1 rounded border border-red-200"
+                            >
+                                Delete All
+                            </button>
+                        )}
+                   </div>
+                   {ePaperPages.length === 0 ? <p className="text-gray-500 italic">No pages uploaded yet.</p> : (
+                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                           {ePaperPages.sort((a,b) => b.date.localeCompare(a.date) || a.pageNumber - b.pageNumber).map(page => (
+                               <div key={page.id} className="bg-white p-2 border border-gray-200 shadow-sm relative group">
+                                   <div className="aspect-[3/4] bg-gray-100 overflow-hidden mb-2">
+                                       <img src={page.imageUrl} alt={`Page ${page.pageNumber}`} className="w-full h-full object-cover" />
+                                   </div>
+                                   <div className="flex justify-between items-center text-xs px-1">
+                                       <span className="font-bold">Pg {page.pageNumber}</span>
+                                       <span className="text-gray-500">{page.date}</span>
+                                   </div>
+                                   <button 
+                                        onClick={() => { if(window.confirm('Delete this page?')) deleteEPaperPage(page.id); }}
+                                        className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded shadow opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+                                   >
+                                       <Trash2 size={14} />
+                                   </button>
+                               </div>
+                           ))}
+                       </div>
+                   )}
+               </div>
+          </div>
+      )}
+
+      {/* --- PUBLISHERS TAB --- */}
+      {activeTab === 'publishers' && isAdmin && (
+          <div>
+               <div className="flex items-center justify-between mb-6">
+                 <h3 className="font-serif font-bold text-xl text-gray-700 flex items-center gap-2">
+                     <Users className="text-gold-dark"/> Manage Publishers
+                 </h3>
+               </div>
+               <div className="bg-white shadow-sm border border-gray-200 overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-100 border-b border-gray-200 text-xs font-bold uppercase text-gray-600 tracking-wider">
+                                <th className="p-4">Name</th>
+                                <th className="p-4">Email</th>
+                                <th className="p-4">Status</th>
+                                <th className="p-4">Joined</th>
+                                <th className="p-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {publisherUsers.length === 0 ? (
+                                <tr><td colSpan={5} className="p-8 text-center text-gray-500 italic">No publishers found.</td></tr>
+                            ) : (
+                                publisherUsers.map(user => (
+                                    <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="p-4 font-bold text-ink text-sm">{user.name}</td>
+                                        <td className="p-4 text-sm text-gray-600">{user.email}</td>
+                                        <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${user.status === 'active' ? 'bg-green-100 text-green-700' : user.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{user.status}</span></td>
+                                        <td className="p-4 text-sm text-gray-500">{user.joinedAt}</td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            <button onClick={() => toggleUserStatus(user.id)} className={`p-2 rounded transition-colors ${user.status === 'active' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`} title={user.status === 'active' ? 'Block/Suspend' : 'Activate/Approve'}><Power size={16}/></button>
+                                            <button onClick={() => { if(window.confirm('Permanently delete this user?')) deleteUser(user.id); }} className="p-2 bg-red-100 text-red-600 rounded" title="Delete"><Trash2 size={16} /></button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+               </div>
+          </div>
+      )}
+
+      {/* --- ADMINS TAB --- */}
+      {activeTab === 'admins' && isChiefEditor && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+               <div className="bg-white p-6 shadow-sm border-t-4 border-ink">
+                    <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
+                        <ShieldAlert size={20}/> Create Admin
+                    </h3>
+                    <form onSubmit={handleCreateAdmin} className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Name</label>
+                            <input type="text" required className="w-full border p-2 text-sm focus:ring-1 focus:ring-ink outline-none" value={newAdminName} onChange={e => setNewAdminName(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Email</label>
+                            <input type="email" required className="w-full border p-2 text-sm focus:ring-1 focus:ring-ink outline-none" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Password</label>
+                            <input type="password" required className="w-full border p-2 text-sm focus:ring-1 focus:ring-ink outline-none" value={newAdminPassword} onChange={e => setNewAdminPassword(e.target.value)} />
+                        </div>
+                        <button type="submit" className="w-full bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gray-800 transition-colors tracking-widest">
+                            Grant Access
+                        </button>
+                    </form>
+               </div>
+               <div className="md:col-span-2">
+                    <h3 className="font-serif font-bold text-xl mb-4 text-gray-700">Administrators</h3>
+                    <div className="bg-white shadow-sm border border-gray-200">
+                         {adminUsers.map(admin => (
+                             <div key={admin.id} className="p-4 border-b last:border-0 flex justify-between items-center">
+                                 <div className="flex items-center gap-3">
+                                     <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-gray-500">
+                                        <Shield size={20} />
+                                     </div>
+                                     <div>
+                                         <h4 className="font-bold text-sm text-ink">{admin.name} {admin.id === CHIEF_EDITOR_ID && <span className="text-gold-dark text-[10px] uppercase">(Chief)</span>}</h4>
+                                         <p className="text-xs text-gray-500">{admin.email}</p>
+                                     </div>
+                                 </div>
+                                 {admin.id !== CHIEF_EDITOR_ID && (
+                                     <button onClick={() => { if(window.confirm('Revoke admin access?')) deleteUser(admin.id); }} className="text-red-500 hover:text-red-700 text-xs font-bold uppercase border border-red-200 px-3 py-1 rounded hover:bg-red-50">Revoke</button>
+                                 )}
+                             </div>
+                         ))}
+                    </div>
+               </div>
+          </div>
+      )}
+
+      {/* --- APPROVALS TAB --- */}
+      {activeTab === 'approvals' && isChiefEditor && (
+          <div className="space-y-8">
+              
+              {/* Pending Articles */}
+              <div className="bg-white p-6 shadow-sm border border-gray-200">
+                  <h3 className="font-serif font-bold text-lg mb-4 text-gray-700 flex items-center gap-2">
+                      <FileText size={20}/> Pending Articles
+                  </h3>
+                  {pendingArticles.length === 0 ? <p className="text-gray-500 italic text-sm">No articles waiting for approval.</p> : (
+                      <div className="space-y-4">
+                          {pendingArticles.map(article => (
+                              <div key={article.id} className="border border-gray-200 p-4 rounded bg-gray-50 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                                   <div className="flex gap-4">
+                                       <img src={article.imageUrl} className="w-20 h-20 object-cover rounded bg-gray-200" alt="" />
+                                       <div>
+                                           <h4 className="font-bold text-ink">{article.title}</h4>
+                                           <p className="text-xs text-gray-500 mb-1">By {article.author} • {article.date}</p>
+                                           <p className="text-sm text-gray-600 line-clamp-1">{article.excerpt}</p>
+                                       </div>
+                                   </div>
+                                   <div className="flex gap-2 shrink-0">
+                                       <Link to={`/article/${article.id}`} target="_blank" className="bg-gray-200 text-gray-700 px-3 py-2 rounded font-bold text-xs uppercase hover:bg-gray-300">Preview</Link>
+                                       <button onClick={() => approveContent('article', article.id)} className="bg-green-600 text-white px-3 py-2 rounded font-bold text-xs uppercase hover:bg-green-700">Approve</button>
+                                       <button onClick={() => rejectContent('article', article.id)} className="bg-red-600 text-white px-3 py-2 rounded font-bold text-xs uppercase hover:bg-red-700">Reject</button>
+                                   </div>
+                              </div>
+                          ))}
+                      </div>
+                  )}
+              </div>
+
+              {/* Pending Publishers */}
+              <div className="bg-white p-6 shadow-sm border border-gray-200">
+                  <h3 className="font-serif font-bold text-lg mb-4 text-gray-700 flex items-center gap-2">
+                      <Users size={20}/> Pending Publisher Requests
+                  </h3>
+                   {publisherUsers.filter(u => u.status === 'pending').length === 0 ? <p className="text-gray-500 italic text-sm">No pending requests.</p> : (
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           {publisherUsers.filter(u => u.status === 'pending').map(user => (
+                               <div key={user.id} className="border p-4 rounded flex justify-between items-center bg-yellow-50 border-yellow-200">
+                                   <div>
+                                       <h4 className="font-bold text-sm">{user.name}</h4>
+                                       <p className="text-xs text-gray-600">{user.email}</p>
+                                   </div>
+                                   <div className="flex gap-2">
+                                       <button onClick={() => toggleUserStatus(user.id)} className="text-green-600 hover:bg-green-100 p-2 rounded"><CheckCircle size={20}/></button>
+                                       <button onClick={() => deleteUser(user.id)} className="text-red-600 hover:bg-red-100 p-2 rounded"><X size={20}/></button>
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   )}
+              </div>
+          </div>
+      )}
 
       {/* --- INBOX TAB --- */}
       {activeTab === 'inbox' && isChiefEditor && (
@@ -575,12 +963,12 @@ export const Admin: React.FC = () => {
       )}
 
       {/* --- ANALYTICS TAB --- */}
-      {activeTab === 'analytics' && currentUser.role === 'admin' && (
+      {activeTab === 'analytics' && isAdmin && (
           <AnalyticsDashboard />
       )}
 
       {/* --- SUBSCRIBERS TAB --- */}
-      {activeTab === 'subscribers' && currentUser.role === 'admin' && (
+      {activeTab === 'subscribers' && isAdmin && (
           <div>
               <div className="flex items-center justify-between mb-6">
                 <h3 className="font-serif font-bold text-xl text-gray-700 flex items-center gap-2">
@@ -594,21 +982,30 @@ export const Admin: React.FC = () => {
                             <th className="p-4">Name</th>
                             <th className="p-4">Email</th>
                             <th className="p-4">Plan</th>
+                            <th className="p-4">Ads</th>
                             <th className="p-4">Status</th>
                             <th className="p-4 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {subscriberUsers.length === 0 ? (
-                            <tr><td colSpan={5} className="p-8 text-center text-gray-500 italic">No subscribers yet.</td></tr>
+                            <tr><td colSpan={6} className="p-8 text-center text-gray-500 italic">No subscribers yet.</td></tr>
                         ) : (
                             subscriberUsers.map(user => (
                                 <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="p-4 font-bold text-ink text-sm">{user.name}</td>
                                     <td className="p-4 text-sm text-gray-600">{user.email}</td>
                                     <td className="p-4 text-xs font-bold uppercase text-gold-dark">{user.subscriptionPlan || 'free'}</td>
+                                    <td className="p-4 text-xs font-bold uppercase">
+                                        {user.isAdFree || user.subscriptionPlan === 'premium' ? (
+                                            <span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">Off</span>
+                                        ) : (
+                                            <span className="text-gray-500 bg-gray-200 px-2 py-0.5 rounded">On</span>
+                                        )}
+                                    </td>
                                     <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${user.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{user.status}</span></td>
                                     <td className="p-4 text-right flex justify-end gap-2">
+                                        <button onClick={() => toggleUserAdStatus(user.id)} className={`p-2 rounded transition-colors ${user.isAdFree ? 'bg-gray-200 text-gray-600' : 'bg-purple-100 text-purple-600'}`} title={user.isAdFree ? "Enable Ads" : "Disable Ads"}><MonitorOff size={16} /></button>
                                         <button onClick={() => toggleUserSubscription(user.id)} className={`p-2 rounded transition-colors ${user.subscriptionPlan === 'premium' ? 'bg-purple-100 text-purple-600' : 'bg-gray-200 text-gray-600'}`} title={user.subscriptionPlan === 'premium' ? "Downgrade to Free" : "Upgrade to Premium"}><Star size={16} fill={user.subscriptionPlan === 'premium' ? "currentColor" : "none"} /></button>
                                         <button onClick={() => toggleUserStatus(user.id)} className={`p-2 rounded transition-colors ${user.status === 'active' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`} title="Block/Unblock"><Ban size={16} /></button>
                                         <button onClick={() => { if(window.confirm('Remove this subscriber?')) deleteUser(user.id); }} className="p-2 bg-red-100 text-red-600 rounded" title="Remove"><Trash2 size={16} /></button>
@@ -623,7 +1020,7 @@ export const Admin: React.FC = () => {
       )}
       
       {/* --- CLASSIFIEDS TAB --- */}
-      {activeTab === 'classifieds' && currentUser.role === 'admin' && (
+      {activeTab === 'classifieds' && isAdmin && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1">
                   <div className="bg-white p-6 shadow-sm border-t-4 border-gold">
@@ -709,7 +1106,7 @@ export const Admin: React.FC = () => {
       )}
 
       {/* --- CATEGORIES TAB --- */}
-      {activeTab === 'categories' && currentUser.role === 'admin' && (
+      {activeTab === 'categories' && isAdmin && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-1">
                   <div className="bg-white p-6 shadow-sm border-t-4 border-gold">
@@ -756,7 +1153,7 @@ export const Admin: React.FC = () => {
       )}
 
       {/* --- ADS TAB --- */}
-      {activeTab === 'ads' && currentUser.role === 'admin' && (
+      {activeTab === 'ads' && isAdmin && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-6">
                  <div className="bg-white p-6 shadow-sm border-t-4 border-gold">
@@ -918,8 +1315,8 @@ export const Admin: React.FC = () => {
                        </div>
                    </div>
 
-                    {/* Email Configuration */}
-                    {currentUser.role === 'admin' && (
+                    {/* Email Configuration (ADMIN ONLY) */}
+                    {isAdmin && (
                         <div className="bg-white p-8 shadow-sm border-l-4 border-l-blue-500">
                             <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Mail size={20}/> Email Configuration</h3>
                             <form onSubmit={handleEmailSettingsSubmit} className="space-y-4">
@@ -944,8 +1341,8 @@ export const Admin: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Ad Settings Configuration */}
-                    {currentUser.role === 'admin' && (
+                    {/* Ad Settings Configuration (ADMIN ONLY) */}
+                    {isAdmin && (
                          <div className="bg-white p-8 shadow-sm border-l-4 border-l-purple-500">
                               <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Megaphone size={20}/> Ad Configuration</h3>
                               <form onSubmit={handleAdSettingsSubmit} className="space-y-4">
@@ -964,8 +1361,8 @@ export const Admin: React.FC = () => {
                          </div>
                     )}
 
-                    {/* Subscription Settings */}
-                    {currentUser.role === 'admin' && (
+                    {/* Subscription Settings (ADMIN ONLY) */}
+                    {isAdmin && (
                         <div className="bg-white p-8 shadow-sm border-l-4 border-l-gold">
                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><DollarSign size={20}/> Subscription Settings</h3>
                              <form onSubmit={handleSubscriptionSettingsSubmit} className="space-y-4">

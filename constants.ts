@@ -89,7 +89,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["Finance", "Silicon Valley", "Stocks"],
     status: 'published',
     isFeatured: true,
-    views: 12540
+    views: 0
   },
   {
     id: '2',
@@ -104,7 +104,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["Architecture", "Europe", "Sustainability"],
     status: 'published',
     isFeatured: false,
-    views: 8432
+    views: 0
   },
   {
     id: '3',
@@ -119,7 +119,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["AI", "Policy", "Tech Summit"],
     status: 'published',
     isFeatured: false,
-    views: 15600
+    views: 0
   },
   {
     id: '4',
@@ -134,7 +134,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["Peace", "Geneva", "World Politics"],
     status: 'published',
     isFeatured: true,
-    views: 21000
+    views: 0
   },
   {
     id: '5',
@@ -149,7 +149,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["Football", "Championship", "Sports"],
     status: 'published',
     isFeatured: false,
-    views: 18450
+    views: 0
   },
 
   // --- LATEST NEWS ARTICLES (Next 3) ---
@@ -166,7 +166,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["Environment", "City Life", "Food"],
     status: 'published',
     isFeatured: false,
-    views: 4500
+    views: 0
   },
   {
     id: '7',
@@ -181,7 +181,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["EV", "Automotive", "Green Energy"],
     status: 'published',
     isFeatured: false,
-    views: 6700
+    views: 0
   },
   {
     id: '8',
@@ -196,7 +196,7 @@ export const INITIAL_ARTICLES: Article[] = [
     tags: ["Science", "Ocean", "Discovery"],
     status: 'published',
     isFeatured: false,
-    views: 9200
+    views: 0
   }
 ];
 
@@ -286,7 +286,7 @@ export const INITIAL_ADS: Advertisement[] = [
         status: 'active',
         startDate: '2024-01-01',
         endDate: '2030-12-31',
-        clicks: 1240,
+        clicks: 0,
         clickedIps: []
     },
     {
@@ -298,7 +298,7 @@ export const INITIAL_ADS: Advertisement[] = [
         status: 'active',
         startDate: '2024-01-05',
         endDate: '2030-12-31',
-        clicks: 850,
+        clicks: 0,
         clickedIps: []
     }
 ];
