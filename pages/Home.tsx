@@ -8,7 +8,7 @@ import { PlayCircle, Clock, ArrowRight, Eye, ChevronLeft, ChevronRight, Zap, Bri
 import { WeatherWidget } from '../components/WeatherWidget';
 
 export const Home: React.FC = () => {
-  const { articles, currentUser, classifieds, users } = useNews();
+  const { articles, currentUser, classifieds, users, showAds } = useNews();
   const navigate = useNavigate();
   
   // State for Slider
@@ -61,9 +61,11 @@ export const Home: React.FC = () => {
   return (
     <div className="w-full min-h-screen pb-12 bg-[#FAF9F6]">
         {/* Top Leaderboard Ad */}
-        <div className="max-w-7xl mx-auto px-4 border-b border-gray-200 pb-8">
-            <AdSpace size={AdSize.LEADERBOARD} className="w-full" label="Premium Global Partners" />
-        </div>
+        {showAds && (
+            <div className="max-w-7xl mx-auto px-4 border-b border-gray-200 pb-8">
+                <AdSpace size={AdSize.LEADERBOARD} className="w-full" label="Premium Global Partners" />
+            </div>
+        )}
 
         <div className="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
             
@@ -175,9 +177,11 @@ export const Home: React.FC = () => {
 
 
                 {/* In-Feed Ad Space */}
-                <div className="border-t border-b border-gray-200 py-8 my-8 bg-gray-50/50 rounded-lg">
-                    <AdSpace size={AdSize.LEADERBOARD} label="Sponsored Content" />
-                </div>
+                {showAds && (
+                    <div className="border-t border-b border-gray-200 py-8 my-8 bg-gray-50/50 rounded-lg">
+                        <AdSpace size={AdSize.LEADERBOARD} label="Sponsored Content" />
+                    </div>
+                )}
 
                 {/* --- MOBILE ONLY: Split View (Latest & Trending Side-by-Side) --- */}
                 <div className="grid grid-cols-2 gap-3 md:hidden border-b-4 border-double border-gray-200 pb-8 mb-8">
@@ -323,9 +327,11 @@ export const Home: React.FC = () => {
                 </div>
 
                 {/* Sidebar Ad */}
-                <div className="bg-white p-6 shadow-sm border border-gray-100 rounded-lg flex justify-center">
-                     <AdSpace size={AdSize.RECTANGLE} label="Sponsored" />
-                </div>
+                {showAds && (
+                    <div className="bg-white p-6 shadow-sm border border-gray-100 rounded-lg flex justify-center">
+                         <AdSpace size={AdSize.RECTANGLE} label="Sponsored" />
+                    </div>
+                )}
 
                 {/* Subscribe Widget - Hidden if logged in */}
                 {!currentUser && (
@@ -343,9 +349,11 @@ export const Home: React.FC = () => {
                 )}
                 
                  {/* Skyscraper Ad */}
-                 <div className="hidden md:flex justify-center sticky top-24 pt-4">
-                     <AdSpace size={AdSize.SKYSCRAPER} />
-                </div>
+                 {showAds && (
+                     <div className="hidden md:flex justify-center sticky top-24 pt-4">
+                         <AdSpace size={AdSize.SKYSCRAPER} />
+                    </div>
+                 )}
 
             </div>
         </div>

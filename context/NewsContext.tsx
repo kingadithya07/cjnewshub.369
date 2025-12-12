@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { Article, EPaperPage, Clipping, User, UserRole, Advertisement, WatermarkSettings, RecoveryRequest, ProfileUpdateRequest, EmailSettings, SubscriptionSettings, AdSettings, AnalyticsData, Comment, ContactMessage, Classified } from '../types';
 import { CHIEF_EDITOR_ID, DEFAULT_EMAIL_SETTINGS, DEFAULT_SUBSCRIPTION_SETTINGS, DEFAULT_AD_SETTINGS, INITIAL_ARTICLES, INITIAL_USERS, INITIAL_EPAPER_PAGES, INITIAL_ADS, INITIAL_CLASSIFIEDS } from '../constants';
 import { supabase } from '../lib/supabase';
@@ -20,6 +20,7 @@ interface NewsContextType {
   comments: Comment[];
   contactMessages: ContactMessage[];
   classifieds: Classified[];
+  showAds: boolean;
   
   login: (email: string, password: string, role?: UserRole) => Promise<User | null>;
   register: (name: string, email: string, password: string, role?: UserRole) => Promise<{ success: boolean; message?: string }>;
@@ -118,6 +119,14 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [profileUpdateRequests, setProfileUpdateRequests] = useState<ProfileUpdateRequest[]>([]);
   const [visitorIp, setVisitorIp] = useState<string>('');
 
+  // --- DERIVED STATE ---
+  const showAds = useMemo(() => {
+      if (!adSettings.enableAdsGlobally) return false;
+      if (currentUser?.subscriptionPlan === 'premium') return false;
+      if (currentUser?.isAdFree) return false;
+      return true;
+  }, [adSettings, currentUser]);
+
   // --- INITIAL DATA LOAD & SEEDING ---
   const fetchData = async () => {
       if(!supabase) return;
@@ -189,10 +198,15 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Sync user to local storage for persistence
   useEffect(() => {
-    if (currentUser) {
-        localStorage.setItem('cj_current_user', JSON.stringify(currentUser));
-    } else {
-        localStorage.removeItem('cj_current_user');
+    try {
+        if (currentUser) {
+            localStorage.setItem('cj_current_user', JSON.stringify(currentUser));
+        } else {
+            localStorage.removeItem('cj_current_user');
+        }
+    } catch (e) {
+        console.error("Failed to save session to local storage (likely quota exceeded):", e);
+        alert("Warning: Local storage full. Some profile data (like large images) may not persist on refresh.");
     }
   }, [currentUser]);
 
@@ -409,12 +423,47 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const initiateProfileUpdate = async (newEmail?: string, newPassword?: string, newProfilePic?: string): Promise<{ code: string, message: string } | null> => {
       if (!currentUser) return null;
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      // Store request... (Implementation simplified for brevity as focus is on login/recovery)
+      
+      const request: ProfileUpdateRequest = {
+          userId: currentUser.id,
+          newEmail,
+          newPassword,
+          newProfilePic,
+          verificationCode: code,
+          timestamp: Date.now()
+      };
+
+      setProfileUpdateRequests(prev => [...prev, request]);
       return { code, message: `Verification code: ${code}` };
   };
 
   const completeProfileUpdate = async (code: string): Promise<boolean> => {
-      return true; // Simplified
+      if (!currentUser) return false;
+
+      // Find the request matching current user and code
+      const request = profileUpdateRequests.find(r => r.userId === currentUser.id && r.verificationCode === code);
+      
+      if (!request) return false;
+
+      const updates: Partial<User> = {};
+      if (request.newEmail) updates.email = request.newEmail;
+      if (request.newPassword) updates.password = request.newPassword;
+      if (request.newProfilePic) updates.profilePicUrl = request.newProfilePic;
+
+      // Optimistic Update Local State
+      const updatedUser = { ...currentUser, ...updates };
+      setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, ...updates } : u));
+      setCurrentUser(updatedUser);
+
+      // Update Database
+      if (supabase) {
+          await supabase.from('users').update(updates).eq('id', currentUser.id);
+      }
+
+      // Cleanup
+      setProfileUpdateRequests(prev => prev.filter(r => r !== request));
+      
+      return true;
   };
   
   const updateEmailSettings = async (settings: EmailSettings) => setEmailSettings(settings);
@@ -666,7 +715,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <NewsContext.Provider value={{
       articles, categories, ePaperPages, clippings, currentUser, users, advertisements,
       watermarkSettings, recoveryRequests, emailSettings, subscriptionSettings, adSettings,
-      comments, contactMessages, classifieds,
+      comments, contactMessages, classifieds, showAds,
       login, register, createAdmin, setupMasterAdmin, logout, resetPassword, initiateRecovery, completeRecovery,
       initiateProfileUpdate, completeProfileUpdate, updateEmailSettings, updateSubscriptionSettings,
       updateAdSettings, getAnalytics, addArticle, updateArticle, deleteArticle, incrementArticleView,

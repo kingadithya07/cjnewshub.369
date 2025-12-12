@@ -10,23 +10,12 @@ interface AdSpaceProps {
 }
 
 export const AdSpace: React.FC<AdSpaceProps> = ({ size, className = '', label = 'Advertisement' }) => {
-  const { advertisements, trackAdClick, currentUser, adSettings } = useNews();
+  const { advertisements, trackAdClick, showAds } = useNews();
   const [width, height] = size.split('x');
-
-  // Logic to hide ads
-  // 1. Global switch is OFF
-  // 2. User is Premium
-  // 3. User has isAdFree flag set manually
-  const shouldShowAds = useMemo(() => {
-      if (!adSettings.enableAdsGlobally) return false;
-      if (currentUser?.subscriptionPlan === 'premium') return false;
-      if (currentUser?.isAdFree) return false;
-      return true;
-  }, [adSettings, currentUser]);
 
   // Filter ads for this specific size that are active and within date range
   const activeAds = useMemo(() => {
-      if (!shouldShowAds) return [];
+      if (!showAds) return [];
       const now = new Date().toISOString().split('T')[0];
       return advertisements.filter(ad => 
           ad.size === size && 
@@ -34,7 +23,7 @@ export const AdSpace: React.FC<AdSpaceProps> = ({ size, className = '', label = 
           ad.startDate <= now &&
           ad.endDate >= now
       );
-  }, [advertisements, size, shouldShowAds]);
+  }, [advertisements, size, showAds]);
 
   // Select a random ad from the available pool for this size
   const currentAd = useMemo(() => {
@@ -43,7 +32,7 @@ export const AdSpace: React.FC<AdSpaceProps> = ({ size, className = '', label = 
       return activeAds[randomIndex];
   }, [activeAds]);
 
-  if (!shouldShowAds) return null;
+  if (!showAds) return null;
 
   return (
     <div className={`flex flex-col items-center justify-center my-4 ${className}`}>

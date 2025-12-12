@@ -3,16 +3,21 @@ import React from 'react';
 import { AdSpace } from './AdSpace';
 import { AdSize } from '../types';
 import { Link } from 'react-router-dom';
+import { useNews } from '../context/NewsContext';
 
 export const Footer: React.FC = () => {
+  const { showAds } = useNews();
+
   return (
     <footer className="bg-ink text-white pt-8 pb-8 border-t-4 border-gold mt-auto">
       {/* Footer Ad Unit */}
-      <div className="w-full flex justify-center pb-8 border-b border-gray-800 mb-8 px-4">
-         <div className="bg-white/5 p-2 rounded">
-            <AdSpace size={AdSize.LEADERBOARD} label="Partner Advertisement" className="my-0" />
-         </div>
-      </div>
+      {showAds && (
+          <div className="w-full flex justify-center pb-8 border-b border-gray-800 mb-8 px-4">
+             <div className="bg-white/5 p-2 rounded">
+                <AdSpace size={AdSize.LEADERBOARD} label="Partner Advertisement" className="my-0" />
+             </div>
+          </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
         <div className="col-span-1 md:col-span-1">

@@ -9,7 +9,7 @@ import { AdSpace } from '../components/AdSpace';
 import { AdSize } from '../types';
 
 export const EPaper: React.FC = () => {
-  const { ePaperPages, addClipping, clippings, watermarkSettings, currentUser } = useNews();
+  const { ePaperPages, addClipping, clippings, watermarkSettings, currentUser, showAds } = useNews();
   
   // Determine available dates (for reference, though we default to today)
   const availableDates = useMemo(() => {
@@ -720,9 +720,11 @@ export const EPaper: React.FC = () => {
             </div>
 
             {/* E-Paper Sidebar Ad */}
-            <div className="p-4 bg-black border-t border-gray-800 hidden lg:flex justify-center">
-                 <AdSpace size={AdSize.RECTANGLE} className="my-0" />
-            </div>
+            {showAds && (
+                <div className="p-4 bg-black border-t border-gray-800 hidden lg:flex justify-center">
+                     <AdSpace size={AdSize.RECTANGLE} className="my-0" />
+                </div>
+            )}
         </div>
 
         {/* --- REDESIGNED COMPACT CLIPPING PREVIEW MODAL --- */}

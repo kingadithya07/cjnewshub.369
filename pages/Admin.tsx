@@ -376,6 +376,11 @@ export const Admin: React.FC = () => {
   const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
+          // STRICT LIMIT: 500KB to safely fit into localStorage (total 5MB quota)
+          if (file.size > 500 * 1024) { 
+              alert("File size too large. Please upload an image smaller than 500KB to ensure it saves correctly.");
+              return;
+          }
           const reader = new FileReader();
           reader.onloadend = () => {
               setSettingsProfilePic(reader.result as string);
@@ -462,10 +467,28 @@ export const Admin: React.FC = () => {
       handleCancelAdEdit();
   };
 
+  const handleAdImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              setAdForm(prev => ({ ...prev, imageUrl: reader.result as string }));
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
   const handleCancelAdEdit = () => {
       setEditingAdId(null);
       setAdForm(initialAdFormState);
       setAdImageSourceType('url');
+  };
+
+  const handleEditAd = (ad: Advertisement) => {
+      setEditingAdId(ad.id);
+      setAdForm(ad);
+      setAdImageSourceType(ad.imageUrl.startsWith('data:') ? 'upload' : 'url');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -869,28 +892,6 @@ export const Admin: React.FC = () => {
                                         Add Page to Issue
                                     </button>
                                </form>
-
-                               {/* Watermark Settings */}
-                               {isChiefEditor && (
-                                   <div className="mt-8 pt-8 border-t border-gray-200">
-                                        <h4 className="font-bold text-gray-700 mb-4 flex items-center gap-2"><Sparkles size={16}/> Watermark Settings</h4>
-                                        <form onSubmit={handleWatermarkSubmit} className="space-y-4">
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Watermark Text</label>
-                                                <input type="text" className="w-full border p-2 text-sm focus:ring-1 focus:ring-gold outline-none" value={watermarkFormText} onChange={e => setWatermarkFormText(e.target.value)} placeholder="e.g. CJ NEWS HUB" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Logo URL (Optional)</label>
-                                                <div className="flex gap-2">
-                                                    <input type="text" className="w-full border p-2 text-sm focus:ring-1 focus:ring-gold outline-none" value={watermarkFormLogo || ''} onChange={e => setWatermarkFormLogo(e.target.value)} placeholder="https://..." />
-                                                    <label className="bg-gray-200 px-3 py-2 cursor-pointer hover:bg-gray-300 rounded"><ImageIcon size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleWatermarkLogoUpload}/></label>
-                                                </div>
-                                                {watermarkFormLogo && <img src={watermarkFormLogo} className="mt-2 h-10 object-contain" alt="Watermark Logo" />}
-                                            </div>
-                                            <button type="submit" className="w-full bg-gray-800 text-white py-2 text-xs font-bold uppercase hover:bg-gray-700">Save Settings</button>
-                                        </form>
-                                   </div>
-                               )}
                            </div>
 
                            <div className="space-y-6">
@@ -998,6 +999,329 @@ export const Admin: React.FC = () => {
                                 </table>
                            </div>
                       </div>
+                  )}
+
+                  {/* --- CATEGORIES TAB --- */}
+                  {activeTab === 'categories' && isAdmin && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
+                          <div className="bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
+                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
+                                  <Tag size={20}/> Manage Categories
+                              </h3>
+                              <form onSubmit={handleCategoryAdd} className="flex gap-2">
+                                  <input 
+                                      type="text" 
+                                      className="flex-1 border p-2 text-sm focus:ring-1 focus:ring-gold outline-none" 
+                                      value={newCategoryName} 
+                                      onChange={e => setNewCategoryName(e.target.value)} 
+                                      placeholder="New Category Name" 
+                                  />
+                                  <button type="submit" className="bg-ink text-white px-4 py-2 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors">
+                                      Add
+                                  </button>
+                              </form>
+                          </div>
+                          <div className="bg-white shadow-sm border border-gray-200 rounded-sm overflow-hidden">
+                              <h3 className="p-4 border-b border-gray-100 font-serif font-bold text-lg text-gray-700">Existing Categories</h3>
+                              <ul className="divide-y divide-gray-100">
+                                  {categories.map(cat => (
+                                      <li key={cat} className="p-4 flex justify-between items-center hover:bg-gray-50">
+                                          <span className="font-bold text-gray-700">{cat}</span>
+                                          <button onClick={() => deleteCategory(cat)} className="text-red-500 hover:text-red-700 p-1"><Trash2 size={16}/></button>
+                                      </li>
+                                  ))}
+                              </ul>
+                          </div>
+                      </div>
+                  )}
+
+                  {/* --- ADS TAB --- */}
+                  {activeTab === 'ads' && isAdmin && (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-500">
+                          <div className="lg:col-span-4 bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
+                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
+                                  <Megaphone size={20}/> {editingAdId ? 'Edit Ad' : 'Create New Ad'}
+                              </h3>
+                              <form onSubmit={handleAdSubmit} className="space-y-4">
+                                  <div>
+                                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Advertiser Name</label>
+                                      <input type="text" className="w-full border p-2 text-sm outline-none" value={adForm.advertiserName} onChange={e => setAdForm({...adForm, advertiserName: e.target.value})} required />
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Image Source</label>
+                                      <div className="flex gap-4 mb-2">
+                                          <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={adImageSourceType === 'url'} onChange={() => setAdImageSourceType('url')} className="accent-gold"/> <span className="text-xs">URL</span></label>
+                                          <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={adImageSourceType === 'upload'} onChange={() => setAdImageSourceType('upload')} className="accent-gold"/> <span className="text-xs">Upload</span></label>
+                                      </div>
+                                      {adImageSourceType === 'url' ? (
+                                          <input type="text" className="w-full border p-2 text-sm outline-none" value={adForm.imageUrl} onChange={e => setAdForm({...adForm, imageUrl: e.target.value})} placeholder="https://..." required />
+                                      ) : (
+                                          <div className="border border-dashed border-gray-300 p-4 text-center cursor-pointer hover:bg-gray-50 relative">
+                                              <input type="file" accept="image/*" onChange={handleAdImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                              <span className="text-xs text-gray-500">Click to upload image</span>
+                                          </div>
+                                      )}
+                                      {adForm.imageUrl && <img src={adForm.imageUrl} className="mt-2 w-full h-20 object-contain bg-gray-50 border" alt="Preview"/>}
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Target URL</label>
+                                      <input type="text" className="w-full border p-2 text-sm outline-none" value={adForm.targetUrl} onChange={e => setAdForm({...adForm, targetUrl: e.target.value})} placeholder="https://..." required />
+                                  </div>
+                                  <div>
+                                      <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Ad Size</label>
+                                      <select className="w-full border p-2 text-sm outline-none bg-white" value={adForm.size} onChange={e => setAdForm({...adForm, size: e.target.value as AdSize})}>
+                                          {Object.values(AdSize).map(size => <option key={size} value={size}>{size}</option>)}
+                                      </select>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-4">
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Start Date</label>
+                                          <input type="date" className="w-full border p-2 text-sm outline-none" value={adForm.startDate} onChange={e => setAdForm({...adForm, startDate: e.target.value})} required />
+                                      </div>
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">End Date</label>
+                                          <input type="date" className="w-full border p-2 text-sm outline-none" value={adForm.endDate} onChange={e => setAdForm({...adForm, endDate: e.target.value})} required />
+                                      </div>
+                                  </div>
+                                  <div className="flex gap-2 pt-2">
+                                      {editingAdId && <button type="button" onClick={handleCancelAdEdit} className="flex-1 bg-gray-200 py-2 text-xs font-bold uppercase">Cancel</button>}
+                                      <button type="submit" className="flex-1 bg-ink text-white py-2 text-xs font-bold uppercase hover:bg-gold hover:text-ink transition-colors">
+                                          {editingAdId ? 'Update Ad' : 'Create Ad'}
+                                      </button>
+                                  </div>
+                              </form>
+                          </div>
+                          <div className="lg:col-span-8 space-y-4">
+                              <h3 className="font-serif font-bold text-lg text-gray-700">Active Campaigns</h3>
+                              {advertisements.length === 0 ? <p className="text-gray-500 italic">No ads running.</p> : advertisements.map(ad => (
+                                  <div key={ad.id} className="bg-white p-4 border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-start md:items-center">
+                                      <div className="w-full md:w-32 h-16 bg-gray-50 flex items-center justify-center border shrink-0">
+                                          <img src={ad.imageUrl} alt="" className="max-w-full max-h-full object-contain"/>
+                                      </div>
+                                      <div className="flex-1">
+                                          <h4 className="font-bold text-ink">{ad.advertiserName} <span className="text-[10px] text-gray-400 font-normal">({ad.size})</span></h4>
+                                          <div className="flex gap-4 text-xs text-gray-500 mt-1">
+                                              <span>{ad.startDate} to {ad.endDate}</span>
+                                              <span className="font-bold text-blue-600">{ad.clicks} Clicks</span>
+                                              <span className={`uppercase font-bold ${ad.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>{ad.status}</span>
+                                          </div>
+                                      </div>
+                                      <div className="flex gap-2 self-end md:self-center">
+                                          <button onClick={() => toggleAdStatus(ad.id)} className="p-2 rounded hover:bg-gray-100" title="Toggle Status"><Power size={16} className={ad.status === 'active' ? "text-green-600" : "text-gray-400"} /></button>
+                                          <button onClick={() => handleEditAd(ad)} className="p-2 rounded hover:bg-gray-100 text-blue-600" title="Edit"><Edit size={16} /></button>
+                                          <button onClick={() => { if(window.confirm('Delete this ad?')) deleteAdvertisement(ad.id); }} className="p-2 rounded hover:bg-gray-100 text-red-600" title="Delete"><Trash2 size={16} /></button>
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
+
+                  {/* --- CLASSIFIEDS TAB --- */}
+                  {activeTab === 'classifieds' && isAdmin && (
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
+                          <div className="lg:col-span-1">
+                              <div className="bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
+                                  <h3 className="font-serif font-bold text-xl mb-4 flex items-center gap-2"><Briefcase size={20}/> Post Classified</h3>
+                                  <form onSubmit={handleClassifiedSubmit} className="space-y-4">
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Category</label>
+                                          <select className="w-full border p-2 text-sm outline-none bg-white" value={classifiedForm.category} onChange={e => setClassifiedForm({...classifiedForm, category: e.target.value as any})}>
+                                              <option value="Jobs">Jobs</option>
+                                              <option value="Real Estate">Real Estate</option>
+                                              <option value="Education">Education</option>
+                                              <option value="Services">Services</option>
+                                              <option value="Vehicles">Vehicles</option>
+                                              <option value="Public Notice">Public Notice</option>
+                                              <option value="Matrimonial">Matrimonial</option>
+                                          </select>
+                                      </div>
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Headline</label>
+                                          <input required type="text" className="w-full border p-2 text-sm outline-none" placeholder="e.g. Sales Manager Required" value={classifiedForm.title} onChange={e => setClassifiedForm({...classifiedForm, title: e.target.value})} />
+                                      </div>
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Ad Content</label>
+                                          <textarea required rows={4} className="w-full border p-2 text-sm outline-none resize-none" placeholder="Description of the ad..." value={classifiedForm.description} onChange={e => setClassifiedForm({...classifiedForm, description: e.target.value})} />
+                                      </div>
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Contact Info</label>
+                                          <input required type="text" className="w-full border p-2 text-sm outline-none" placeholder="Phone or Email" value={classifiedForm.contact} onChange={e => setClassifiedForm({...classifiedForm, contact: e.target.value})} />
+                                      </div>
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Location (Optional)</label>
+                                          <input type="text" className="w-full border p-2 text-sm outline-none" placeholder="City or Area" value={classifiedForm.location} onChange={e => setClassifiedForm({...classifiedForm, location: e.target.value})} />
+                                      </div>
+                                      <div>
+                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Image (Optional)</label>
+                                          <div className="border border-dashed border-gray-300 p-4 text-center cursor-pointer hover:bg-gray-50 relative">
+                                              <input type="file" accept="image/*" onChange={handleClassifiedImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                              <span className="text-xs text-gray-500 flex flex-col items-center">
+                                                  <ImageIcon size={16} className="mb-1" />
+                                                  {classifiedForm.imageUrl ? "Image Selected (Click to change)" : "Upload Image"}
+                                              </span>
+                                          </div>
+                                          {classifiedForm.imageUrl && <img src={classifiedForm.imageUrl} className="mt-2 w-full h-24 object-contain border bg-gray-50" alt="Preview"/>}
+                                      </div>
+                                      <button type="submit" className="w-full bg-ink text-white py-3 font-bold hover:bg-gold hover:text-ink transition-colors uppercase tracking-widest text-xs flex items-center justify-center gap-2">
+                                          Post Ad
+                                      </button>
+                                  </form>
+                              </div>
+                          </div>
+                          <div className="lg:col-span-2">
+                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700">Active Listings</h3>
+                              <div className="space-y-4">
+                                  {classifieds.length === 0 ? <p className="text-gray-500 italic">No classifieds posted.</p> : classifieds.map(ad => (
+                                      <div key={ad.id} className="bg-white p-4 border border-gray-200 rounded shadow-sm flex justify-between items-start">
+                                          <div>
+                                              <span className="text-[10px] font-bold uppercase bg-gray-100 px-2 py-1 rounded text-gray-600 mb-2 inline-block">{ad.category}</span>
+                                              <h4 className="font-bold text-ink">{ad.title}</h4>
+                                              <p className="text-xs text-gray-500 mt-1">{ad.description.substring(0, 80)}...</p>
+                                              <div className="flex gap-3 mt-2 text-[10px] text-gray-400">
+                                                  <span>{new Date(ad.timestamp).toLocaleDateString()}</span>
+                                                  <span>{ad.contact}</span>
+                                              </div>
+                                          </div>
+                                          <button onClick={() => { if(window.confirm('Delete this classified ad?')) deleteClassified(ad.id); }} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded">
+                                              <Trash2 size={16} />
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      </div>
+                  )}
+
+                  {/* --- SETTINGS TAB --- */}
+                  {activeTab === 'settings' && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
+                          {/* Profile Settings */}
+                          <div className="space-y-8">
+                              <div className="bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
+                                  <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
+                                      <UserIcon size={20}/> Profile Settings
+                                  </h3>
+                                  
+                                  {/* Step 1: Request Update */}
+                                  {!isProfileVerifying ? (
+                                      <form onSubmit={handleInitiateProfileUpdate} className="space-y-4">
+                                          <div className="flex items-center gap-4 mb-4">
+                                              <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden border border-gray-300 shrink-0">
+                                                  {settingsProfilePic ? (
+                                                      <img src={settingsProfilePic} alt="Profile" className="w-full h-full object-cover" />
+                                                  ) : (
+                                                      <div className="w-full h-full flex items-center justify-center text-gray-400"><UserIcon size={24}/></div>
+                                                  )}
+                                              </div>
+                                              <div>
+                                                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1 cursor-pointer bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded inline-block">
+                                                      Change Photo
+                                                      <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+                                                  </label>
+                                                  <p className="text-[10px] text-gray-400 mt-1">Max 500KB. JPG/PNG.</p>
+                                              </div>
+                                          </div>
+
+                                          <div>
+                                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Email Address</label>
+                                              <input type="email" required className="w-full border p-2 text-sm outline-none" value={settingsEmail} onChange={e => setSettingsEmail(e.target.value)} />
+                                          </div>
+                                          <div>
+                                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">New Password (Optional)</label>
+                                              <input type="password" className="w-full border p-2 text-sm outline-none" placeholder="Leave blank to keep current" value={settingsPassword} onChange={e => setSettingsPassword(e.target.value)} />
+                                          </div>
+                                          
+                                          <button type="submit" className="w-full bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors tracking-widest">
+                                              Update Profile
+                                          </button>
+                                          <p className="text-[10px] text-gray-400 text-center">For security, a verification code will be sent to your email.</p>
+                                      </form>
+                                  ) : (
+                                      /* Step 2: Verify */
+                                      <form onSubmit={handleCompleteProfileUpdate} className="space-y-4">
+                                          <div className="bg-blue-50 border border-blue-200 p-4 rounded text-blue-800 text-sm mb-4">
+                                              Check your email (or the alert popup) for the verification code.
+                                          </div>
+                                          <div>
+                                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Verification Code</label>
+                                              <input type="text" required className="w-full border p-2 text-sm outline-none" value={profileVerificationCode} onChange={e => setProfileVerificationCode(e.target.value)} placeholder="Enter code" />
+                                          </div>
+                                          <div className="flex gap-2">
+                                              <button type="button" onClick={() => setIsProfileVerifying(false)} className="flex-1 bg-gray-200 text-gray-700 py-3 font-bold uppercase text-xs">Cancel</button>
+                                              <button type="submit" className="flex-1 bg-green-600 text-white py-3 font-bold uppercase text-xs hover:bg-green-700">Verify & Save</button>
+                                          </div>
+                                      </form>
+                                  )}
+                              </div>
+                          </div>
+
+                          {/* Global Settings (Admin Only) */}
+                          {isChiefEditor && (
+                              <div className="space-y-8">
+                                  {/* Watermark Settings */}
+                                  <div className="bg-white p-6 shadow-sm border-t-4 border-gray-300 rounded-sm">
+                                      <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Sparkles size={20}/> Watermark Config</h3>
+                                      <form onSubmit={handleWatermarkSubmit} className="space-y-4">
+                                          <div>
+                                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Watermark Text</label>
+                                              <input type="text" className="w-full border p-2 text-sm outline-none" value={watermarkFormText} onChange={e => setWatermarkFormText(e.target.value)} />
+                                          </div>
+                                          <div>
+                                              <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Logo URL</label>
+                                              <div className="flex gap-2">
+                                                  <input type="text" className="w-full border p-2 text-sm outline-none" value={watermarkFormLogo || ''} onChange={e => setWatermarkFormLogo(e.target.value)} />
+                                                  <label className="bg-gray-200 px-3 py-2 cursor-pointer hover:bg-gray-300 rounded"><ImageIcon size={16}/><input type="file" accept="image/*" className="hidden" onChange={handleWatermarkLogoUpload}/></label>
+                                              </div>
+                                          </div>
+                                          <button type="submit" className="w-full bg-gray-800 text-white py-2 text-xs font-bold uppercase hover:bg-gray-700">Save Watermark Settings</button>
+                                      </form>
+                                  </div>
+
+                                  {/* Ad Toggle */}
+                                  <div className="bg-white p-6 shadow-sm border-t-4 border-gray-300 rounded-sm">
+                                      <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Megaphone size={20}/> Ad Configuration</h3>
+                                      <form onSubmit={handleAdSettingsSubmit} className="space-y-4">
+                                          <div className="flex items-center justify-between border p-3 rounded">
+                                              <span className="text-sm font-bold text-gray-700">Enable Ads Globally</span>
+                                              <label className="relative inline-flex items-center cursor-pointer">
+                                                  <input type="checkbox" className="sr-only peer" checked={globalAdsEnabled} onChange={e => setGlobalAdsEnabled(e.target.checked)} />
+                                                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                              </label>
+                                          </div>
+                                          <button type="submit" className="w-full bg-gray-800 text-white py-2 text-xs font-bold uppercase hover:bg-gray-700">Update Ad Settings</button>
+                                      </form>
+                                  </div>
+
+                                  {/* Subscription Settings */}
+                                  <div className="bg-white p-6 shadow-sm border-t-4 border-gray-300 rounded-sm">
+                                      <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><CreditCard size={20}/> Subscription Config</h3>
+                                      <form onSubmit={handleSubscriptionSettingsSubmit} className="space-y-4">
+                                          <div className="flex items-center justify-between border p-3 rounded mb-2">
+                                              <span className="text-sm font-bold text-gray-700">Show Payment Button</span>
+                                              <input type="checkbox" checked={subShowPayment} onChange={e => setSubShowPayment(e.target.checked)} className="w-4 h-4 accent-gold" />
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-4">
+                                              <div>
+                                                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Monthly Price</label>
+                                                  <input type="text" className="w-full border p-2 text-sm outline-none" value={subPrice} onChange={e => setSubPrice(e.target.value)} />
+                                              </div>
+                                              <div>
+                                                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Payment Link</label>
+                                                  <input type="text" className="w-full border p-2 text-sm outline-none" value={subPaymentLink} onChange={e => setSubPaymentLink(e.target.value)} />
+                                              </div>
+                                          </div>
+                                          <button type="submit" className="w-full bg-gray-800 text-white py-2 text-xs font-bold uppercase hover:bg-gray-700">Update Subscription</button>
+                                      </form>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  )}
+
+                  {/* --- ANALYTICS TAB --- */}
+                  {activeTab === 'analytics' && isAdmin && (
+                      <AnalyticsDashboard />
                   )}
 
                   {/* --- ADMINS TAB --- */}
@@ -1157,11 +1481,6 @@ export const Admin: React.FC = () => {
                     </div>
                   )}
 
-                  {/* --- ANALYTICS TAB --- */}
-                  {activeTab === 'analytics' && isAdmin && (
-                      <AnalyticsDashboard />
-                  )}
-
                   {/* --- SUBSCRIBERS TAB --- */}
                   {activeTab === 'subscribers' && isAdmin && (
                       <div className="animate-in fade-in duration-500">
@@ -1241,375 +1560,6 @@ export const Admin: React.FC = () => {
                       </div>
                   )}
                   
-                  {/* --- CLASSIFIEDS TAB --- */}
-                  {activeTab === 'classifieds' && isAdmin && (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
-                          <div className="lg:col-span-1">
-                              <div className="bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
-                                  <h3 className="font-serif font-bold text-xl mb-4 flex items-center gap-2"><Briefcase size={20}/> Post Classified</h3>
-                                  <form onSubmit={handleClassifiedSubmit} className="space-y-4">
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Category</label>
-                                          <select className="w-full border p-2 text-sm outline-none bg-white" value={classifiedForm.category} onChange={e => setClassifiedForm({...classifiedForm, category: e.target.value as any})}>
-                                              <option value="Jobs">Jobs</option>
-                                              <option value="Real Estate">Real Estate</option>
-                                              <option value="Education">Education</option>
-                                              <option value="Services">Services</option>
-                                              <option value="Vehicles">Vehicles</option>
-                                              <option value="Public Notice">Public Notice</option>
-                                              <option value="Matrimonial">Matrimonial</option>
-                                          </select>
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Headline</label>
-                                          <input required type="text" className="w-full border p-2 text-sm outline-none" placeholder="e.g. Sales Manager Required" value={classifiedForm.title} onChange={e => setClassifiedForm({...classifiedForm, title: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Ad Content</label>
-                                          <textarea required rows={4} className="w-full border p-2 text-sm outline-none resize-none" placeholder="Description of the ad..." value={classifiedForm.description} onChange={e => setClassifiedForm({...classifiedForm, description: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Contact Info</label>
-                                          <input required type="text" className="w-full border p-2 text-sm outline-none" placeholder="Phone or Email" value={classifiedForm.contact} onChange={e => setClassifiedForm({...classifiedForm, contact: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Location (Optional)</label>
-                                          <input type="text" className="w-full border p-2 text-sm outline-none" placeholder="City or Area" value={classifiedForm.location} onChange={e => setClassifiedForm({...classifiedForm, location: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Image (Optional)</label>
-                                          <div className="border border-dashed border-gray-300 p-4 text-center cursor-pointer hover:bg-gray-50 relative">
-                                              <input type="file" accept="image/*" onChange={handleClassifiedImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                              <span className="text-xs text-gray-500 flex flex-col items-center">
-                                                  <ImageIcon size={16} className="mb-1" />
-                                                  {classifiedForm.imageUrl ? "Image Selected (Click to change)" : "Upload Image"}
-                                              </span>
-                                          </div>
-                                          {classifiedForm.imageUrl && <img src={classifiedForm.imageUrl} className="mt-2 w-full h-24 object-contain border bg-gray-50" alt="Preview"/>}
-                                      </div>
-                                      <button type="submit" className="w-full bg-ink text-white py-3 font-bold hover:bg-gold hover:text-ink transition-colors uppercase tracking-widest text-xs flex items-center justify-center gap-2">
-                                          Post Ad
-                                      </button>
-                                  </form>
-                              </div>
-                          </div>
-                          <div className="lg:col-span-2">
-                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700">Active Classifieds</h3>
-                              <div className="space-y-4">
-                                  {classifieds.length === 0 && <p className="text-gray-500 italic">No classifieds posted.</p>}
-                                  {classifieds.sort((a,b) => b.timestamp - a.timestamp).map(ad => (
-                                      <div key={ad.id} className="bg-white p-4 shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between gap-4">
-                                          
-                                          {/* Thumbnail */}
-                                          {ad.imageUrl && (
-                                            <div className="w-full md:w-24 h-24 bg-gray-100 flex-shrink-0 border border-gray-200">
-                                                <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover" />
-                                            </div>
-                                          )}
-
-                                          <div className="flex-1">
-                                              <div className="flex items-center gap-2 mb-1">
-                                                  <span className="bg-gray-100 text-gray-600 px-2 py-0.5 text-[10px] uppercase font-bold rounded">{ad.category}</span>
-                                                  <span className="text-[10px] text-gray-400">{new Date(ad.timestamp).toLocaleDateString()}</span>
-                                              </div>
-                                              <h4 className="font-bold text-ink">{ad.title}</h4>
-                                              <p className="text-sm text-gray-600 mt-1">{ad.description}</p>
-                                              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 font-bold">
-                                                  <span>Contact: {ad.contact}</span>
-                                                  {ad.location && <span>Location: {ad.location}</span>}
-                                              </div>
-                                          </div>
-                                          <button onClick={() => deleteClassified(ad.id)} className="self-start md:self-center text-red-500 hover:bg-red-50 p-2 rounded"><Trash2 size={16}/></button>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      </div>
-                  )}
-
-                  {/* --- CATEGORIES TAB --- */}
-                  {activeTab === 'categories' && isAdmin && (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
-                          <div className="lg:col-span-1">
-                              <div className="bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
-                                  <h3 className="font-serif font-bold text-xl mb-4 flex items-center gap-2"><Tag size={20}/> New Category</h3>
-                                  <form onSubmit={handleCategoryAdd} className="space-y-4">
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Category Name</label>
-                                          <input 
-                                              type="text" 
-                                              required 
-                                              placeholder="e.g. Health, Science" 
-                                              className="w-full border p-2 text-sm outline-none focus:ring-1 focus:ring-gold"
-                                              value={newCategoryName}
-                                              onChange={e => setNewCategoryName(e.target.value)}
-                                          />
-                                      </div>
-                                      <button type="submit" className="w-full bg-ink text-white py-3 font-bold hover:bg-gold hover:text-ink transition-colors uppercase tracking-widest text-xs flex items-center justify-center gap-2">
-                                          <Plus size={14} /> Add Category
-                                      </button>
-                                  </form>
-                              </div>
-                          </div>
-                          <div className="lg:col-span-2">
-                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700">Existing Categories</h3>
-                              <div className="bg-white shadow-sm border border-gray-200 rounded-sm">
-                                  <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                      {categories.map((cat, idx) => (
-                                          <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 border border-gray-200 rounded">
-                                              <span className="font-bold text-sm text-ink">{cat}</span>
-                                              <button 
-                                                  onClick={() => { if(window.confirm(`Delete category "${cat}"? This will not delete associated articles.`)) deleteCategory(cat); }} 
-                                                  className="text-gray-400 hover:text-red-500 p-1"
-                                                  title="Delete Category"
-                                              >
-                                                  <Trash2 size={16} />
-                                              </button>
-                                          </div>
-                                      ))}
-                                      {categories.length === 0 && <p className="text-gray-500 text-sm italic col-span-2 text-center py-4">No categories defined.</p>}
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  )}
-
-                  {/* --- ADS TAB --- */}
-                  {activeTab === 'ads' && isAdmin && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in duration-500">
-                        <div className="lg:col-span-4 space-y-6">
-                             <div className="bg-white p-6 shadow-sm border-t-4 border-gold rounded-sm">
-                                  <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Megaphone size={20}/> {editingAdId ? 'Edit Campaign' : 'New Campaign'}</h3>
-                                  <form onSubmit={handleAdSubmit} className="space-y-4">
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Advertiser Name</label>
-                                          <input type="text" required className="w-full border p-2 text-sm outline-none" value={adForm.advertiserName || ''} onChange={e => setAdForm({...adForm, advertiserName: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Target URL</label>
-                                          <input type="url" required className="w-full border p-2 text-sm outline-none" value={adForm.targetUrl || ''} onChange={e => setAdForm({...adForm, targetUrl: e.target.value})} />
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Ad Size & Placement</label>
-                                          <select className="w-full border p-2 text-sm outline-none bg-white" value={adForm.size || AdSize.RECTANGLE} onChange={e => setAdForm({...adForm, size: e.target.value as AdSize})}>
-                                              <option value={AdSize.LEADERBOARD}>Leaderboard (728x90) - Top/Footer</option>
-                                              <option value={AdSize.RECTANGLE}>Rectangle (300x250) - Sidebar/Content</option>
-                                              <option value={AdSize.SKYSCRAPER}>Skyscraper (160x600) - Sidebar Sticky</option>
-                                              <option value={AdSize.MOBILE_BANNER}>Mobile Banner (320x50)</option>
-                                              <option value={AdSize.MOBILE_LARGE}>Mobile Large (320x100)</option>
-                                          </select>
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Duration</label>
-                                          <div className="flex gap-2">
-                                              <input type="date" required className="w-full border p-2 text-sm outline-none" value={adForm.startDate || ''} onChange={e => setAdForm({...adForm, startDate: e.target.value})} />
-                                              <input type="date" required className="w-full border p-2 text-sm outline-none" value={adForm.endDate || ''} onChange={e => setAdForm({...adForm, endDate: e.target.value})} />
-                                          </div>
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Creative Asset</label>
-                                          <div className="flex gap-4 mb-2">
-                                              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={adImageSourceType === 'url'} onChange={() => setAdImageSourceType('url')} className="accent-gold"/> <span className="text-xs">URL</span></label>
-                                              <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={adImageSourceType === 'upload'} onChange={() => setAdImageSourceType('upload')} className="accent-gold"/> <span className="text-xs">Upload</span></label>
-                                          </div>
-                                          {adImageSourceType === 'url' ? (
-                                              <input type="text" placeholder="Image URL..." className="w-full border p-2 text-sm outline-none" value={adForm.imageUrl || ''} onChange={e => setAdForm({...adForm, imageUrl: e.target.value})} />
-                                          ) : (
-                                              <div className="border border-dashed border-gray-300 p-4 text-center cursor-pointer hover:bg-gray-50 relative">
-                                                  <input type="file" accept="image/*" onChange={(e) => {
-                                                      const file = e.target.files?.[0];
-                                                      if(file) {
-                                                          const reader = new FileReader();
-                                                          reader.onloadend = () => setAdForm({...adForm, imageUrl: reader.result as string});
-                                                          reader.readAsDataURL(file);
-                                                      }
-                                                  }} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                                  <span className="text-xs text-gray-500">Choose File</span>
-                                              </div>
-                                          )}
-                                          {adForm.imageUrl && <img src={adForm.imageUrl} className="mt-2 w-full h-24 object-contain border bg-gray-50" alt="Preview"/>}
-                                      </div>
-                                      <div className="flex gap-2 pt-2">
-                                          {editingAdId && <button type="button" onClick={handleCancelAdEdit} className="flex-1 bg-gray-200 text-gray-700 py-2 font-bold uppercase text-xs">Cancel</button>}
-                                          <button type="submit" className="flex-1 bg-ink text-white py-2 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors">{editingAdId ? 'Update Campaign' : 'Launch Campaign'}</button>
-                                      </div>
-                                  </form>
-                             </div>
-                        </div>
-                        <div className="lg:col-span-8">
-                             <div className="bg-white shadow-sm border border-gray-200 rounded-sm">
-                                  <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                                      <h3 className="font-serif font-bold text-gray-700">Active Campaigns</h3>
-                                      <span className="text-xs text-gray-500">{advertisements.length} Total</span>
-                                  </div>
-                                  <div className="divide-y divide-gray-100">
-                                      {advertisements.length === 0 ? <div className="p-8 text-center text-gray-500">No active advertisements.</div> : advertisements.map(ad => (
-                                          <div key={ad.id} className="p-4 flex items-center gap-4 hover:bg-gray-50">
-                                              <div className="w-24 h-16 bg-gray-100 border border-gray-200 flex-shrink-0">
-                                                  <img src={ad.imageUrl} className="w-full h-full object-cover" alt="" />
-                                              </div>
-                                              <div className="flex-1">
-                                                  <h4 className="font-bold text-sm text-ink">{ad.advertiserName}</h4>
-                                                  <div className="flex gap-4 text-xs text-gray-500 mt-1">
-                                                      <span>Size: {ad.size}</span>
-                                                      <span>Clicks: {ad.clicks || 0}</span>
-                                                      <span>Ends: {ad.endDate}</span>
-                                                      <span className={`uppercase font-bold ${ad.status === 'active' ? 'text-green-600' : ad.status === 'pending' ? 'text-yellow-600' : 'text-red-500'}`}>{ad.status}</span>
-                                                  </div>
-                                              </div>
-                                              <div className="flex gap-2">
-                                                  <button onClick={() => { setEditingAdId(ad.id); setAdForm(ad); setAdImageSourceType('url'); }} className="p-2 text-gray-500 hover:text-ink"><Edit size={16}/></button>
-                                                  <button onClick={() => toggleAdStatus(ad.id)} className={`p-2 ${ad.status === 'active' ? 'text-orange-500' : 'text-green-500'}`} title={ad.status === 'active' ? 'Pause' : 'Resume'}><Power size={16}/></button>
-                                                  <button onClick={() => { if(window.confirm('Delete this ad?')) deleteAdvertisement(ad.id); }} className="p-2 text-red-500 hover:text-red-700"><Trash2 size={16}/></button>
-                                              </div>
-                                          </div>
-                                      ))}
-                                  </div>
-                             </div>
-                        </div>
-                    </div>
-                  )}
-
-                  {/* --- SETTINGS TAB --- */}
-                  {activeTab === 'settings' && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
-                          
-                          {/* Profile Update Section */}
-                          <div className="bg-white p-8 shadow-sm border-t-4 border-gray-600 rounded-sm">
-                              <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2">
-                                   <Shield size={20}/> Profile & Security
-                              </h3>
-                              
-                              {!isProfileVerifying ? (
-                                  <form onSubmit={handleInitiateProfileUpdate} className="space-y-4">
-                                      {/* Profile Picture Upload */}
-                                      <div className="flex items-center gap-4 mb-4">
-                                          <div className="w-20 h-20 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 border border-gray-300">
-                                              {settingsProfilePic ? (
-                                                  <img src={settingsProfilePic} alt="Profile" className="w-full h-full object-cover" />
-                                              ) : (
-                                                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                                                      <Users size={32} />
-                                                  </div>
-                                              )}
-                                          </div>
-                                          <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-ink text-xs font-bold uppercase px-4 py-2 rounded transition-colors">
-                                              Upload Photo
-                                              <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
-                                          </label>
-                                      </div>
-
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Update Email Address</label>
-                                          <input type="email" className="w-full border p-3 text-sm focus:ring-1 focus:ring-ink outline-none" value={settingsEmail} onChange={e => setSettingsEmail(e.target.value)}/>
-                                      </div>
-                                      <div>
-                                          <label className="block text-xs font-bold uppercase text-gray-500 mb-1">New Password</label>
-                                          <input type="password" placeholder="Leave blank to keep current" className="w-full border p-3 text-sm focus:ring-1 focus:ring-ink outline-none" value={settingsPassword} onChange={e => setSettingsPassword(e.target.value)}/>
-                                      </div>
-                                      <div className="pt-4">
-                                          <button type="submit" className="w-full bg-ink text-white py-3 font-bold hover:bg-gold hover:text-ink transition-colors uppercase tracking-widest text-xs">Request Update</button>
-                                      </div>
-                                  </form>
-                              ) : (
-                                  <form onSubmit={handleCompleteProfileUpdate} className="space-y-6 bg-gray-50 p-6 rounded border border-gold animate-in fade-in">
-                                      <div className="text-center">
-                                          <h4 className="font-bold text-ink">Verify Identity</h4>
-                                          <p className="text-xs text-gray-500 mt-1">Enter code sent to {currentUser.email}</p>
-                                      </div>
-                                      <input type="text" required placeholder="Enter 6-digit code" className="w-full border-2 border-gold p-3 text-center text-lg font-bold tracking-widest focus:outline-none" value={profileVerificationCode} onChange={e => setProfileVerificationCode(e.target.value)}/>
-                                      <div className="flex gap-2">
-                                          <button type="button" onClick={() => { setIsProfileVerifying(false); setProfileVerificationCode(''); }} className="flex-1 bg-gray-200 text-gray-600 py-3 font-bold uppercase text-xs hover:bg-gray-300">Cancel</button>
-                                          <button type="submit" className="flex-1 bg-green-600 text-white py-3 font-bold uppercase text-xs hover:bg-green-700">Confirm Changes</button>
-                                      </div>
-                                  </form>
-                              )}
-                          </div>
-
-                           <div className="flex flex-col gap-8">
-                               {/* Read Only Info */}
-                               <div className="bg-white p-8 shadow-sm border border-gray-200 rounded-sm">
-                                   <h3 className="font-serif font-bold text-xl mb-4 text-gray-700">Account Status</h3>
-                                   <div className="space-y-4 text-sm">
-                                       <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500">Role</span><span className="font-bold uppercase">{currentUser.role}</span></div>
-                                       <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500">Member Since</span><span className="font-bold">{currentUser.joinedAt}</span></div>
-                                       <div className="flex justify-between border-b border-gray-100 pb-2"><span className="text-gray-500">Status</span><span className="font-bold text-green-600 uppercase flex items-center gap-1"><CheckCircle size={14}/> {currentUser.status}</span></div>
-                                   </div>
-                               </div>
-
-                                {/* Email Configuration (ADMIN ONLY) */}
-                                {isAdmin && (
-                                    <div className="bg-white p-8 shadow-sm border-l-4 border-l-blue-500 rounded-sm">
-                                        <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Mail size={20}/> Email Configuration</h3>
-                                        <form onSubmit={handleEmailSettingsSubmit} className="space-y-4">
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Email Service API Key</label>
-                                                <input type="password" required className="w-full border p-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none" value={emailApiKey} onChange={e => setEmailApiKey(e.target.value)}/>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Sender Email ID</label>
-                                                <input type="email" required className="w-full border p-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none" value={emailSender} onChange={e => setEmailSender(e.target.value)}/>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Company Name</label>
-                                                <input type="text" required className="w-full border p-2 text-sm focus:ring-1 focus:ring-blue-500 outline-none" value={emailCompany} onChange={e => setEmailCompany(e.target.value)}/>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Email Template</label>
-                                                <textarea required rows={4} className="w-full border p-2 text-sm font-mono text-gray-600 focus:ring-1 focus:ring-blue-500 outline-none" value={emailTemplate} onChange={e => setEmailTemplate(e.target.value)}/>
-                                            </div>
-                                            <button type="submit" className="w-full bg-blue-600 text-white py-2 font-bold hover:bg-blue-700 transition-colors uppercase tracking-widest text-xs flex items-center justify-center gap-2"><Save size={14} /> Save Configuration</button>
-                                        </form>
-                                    </div>
-                                )}
-
-                                {/* Ad Settings Configuration (ADMIN ONLY) */}
-                                {isAdmin && (
-                                     <div className="bg-white p-8 shadow-sm border-l-4 border-l-purple-500 rounded-sm">
-                                          <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><Megaphone size={20}/> Ad Configuration</h3>
-                                          <form onSubmit={handleAdSettingsSubmit} className="space-y-4">
-                                              <div className="flex items-center justify-between">
-                                                  <label className="text-sm font-bold text-gray-600">Enable Ads Globally</label>
-                                                  <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                                                      <input type="checkbox" checked={globalAdsEnabled} onChange={e => setGlobalAdsEnabled(e.target.checked)} className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer border-gray-300 checked:right-0 checked:border-purple-600"/>
-                                                      <label className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer ${globalAdsEnabled ? 'bg-purple-600' : 'bg-gray-300'}`}></label>
-                                                  </div>
-                                              </div>
-                                              <p className="text-[10px] text-gray-400 mt-2">
-                                                  When disabled, ads will be hidden for ALL users (including guests). Premium subscribers never see ads regardless of this setting.
-                                              </p>
-                                              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 font-bold transition-colors uppercase tracking-widest text-xs flex items-center justify-center gap-2"><Save size={14} /> Update Ad Settings</button>
-                                          </form>
-                                     </div>
-                                )}
-
-                                {/* Subscription Settings (ADMIN ONLY) */}
-                                {isAdmin && (
-                                    <div className="bg-white p-8 shadow-sm border-l-4 border-l-gold rounded-sm">
-                                         <h3 className="font-serif font-bold text-xl mb-4 text-gray-700 flex items-center gap-2"><DollarSign size={20}/> Subscription Settings</h3>
-                                         <form onSubmit={handleSubscriptionSettingsSubmit} className="space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-sm font-bold text-gray-600">Enable Payment Banner & Button</label>
-                                                <input type="checkbox" checked={subShowPayment} onChange={e => setSubShowPayment(e.target.checked)} className="w-5 h-5 accent-gold cursor-pointer" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Monthly Price Display</label>
-                                                <input type="text" className="w-full border p-2 text-sm outline-none" value={subPrice} onChange={e => setSubPrice(e.target.value)} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Payment Link (PayPal/Stripe URL)</label>
-                                                <input type="text" className="w-full border p-2 text-sm outline-none" value={subPaymentLink} onChange={e => setSubPaymentLink(e.target.value)} />
-                                            </div>
-                                            <button type="submit" className="w-full bg-gold hover:bg-gold-dark text-white py-2 font-bold transition-colors uppercase tracking-widest text-xs flex items-center justify-center gap-2"><CreditCard size={14} /> Update Payment Settings</button>
-                                         </form>
-                                         <p className="text-[10px] text-gray-400 mt-2">
-                                            Note: Disabling the payment banner will hide the payment section on the Subscribe page, allowing for free-only registrations.
-                                         </p>
-                                    </div>
-                                )}
-                           </div>
-                      </div>
-                  )}
               </div>
           </div>
       </main>

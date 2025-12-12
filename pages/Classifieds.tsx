@@ -7,7 +7,7 @@ import { AdSpace } from '../components/AdSpace';
 import { AdSize } from '../types';
 
 export const Classifieds: React.FC = () => {
-    const { classifieds } = useNews();
+    const { classifieds, showAds } = useNews();
     const [selectedCategory, setSelectedCategory] = useState<string>('All');
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -164,9 +164,11 @@ export const Classifieds: React.FC = () => {
                             </Link>
                         </div>
 
-                        <div className="flex justify-center">
-                            <AdSpace size={AdSize.SKYSCRAPER} />
-                        </div>
+                        {showAds && (
+                            <div className="flex justify-center">
+                                <AdSpace size={AdSize.SKYSCRAPER} />
+                            </div>
+                        )}
                     </div>
 
                 </div>
