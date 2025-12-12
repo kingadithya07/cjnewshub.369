@@ -125,7 +125,7 @@ export const Header: React.FC = () => {
       </div>
 
       {/* Main Branding - Compact Version */}
-      <div className="w-full py-2 md:py-4 flex flex-col items-center justify-center relative px-2">
+      <div className="w-full py-2 md:py-4 flex flex-col items-start md:items-center justify-center relative px-4 md:px-2">
         <div className="absolute left-4 top-1/2 -translate-y-1/2 hidden md:block w-64">
              <div className="relative">
                 <input 
@@ -151,18 +151,18 @@ export const Header: React.FC = () => {
             )}
         </div>
 
-        <div className="flex items-center gap-4">
-            <Link to="/" className="text-center group">
+        <div className="flex items-center gap-4 w-full md:w-auto">
+            <Link to="/" className="text-left md:text-center group">
               <h1 className="text-3xl md:text-5xl font-serif font-black text-ink tracking-tight group-hover:scale-[1.02] transition-transform duration-300">
                 CJ<span className="text-gold-dark">NEWS</span>HUB
               </h1>
             </Link>
         </div>
         
-        <div className="flex items-center justify-center gap-4 mt-1">
-             <div className="h-[1px] w-8 bg-gray-400"></div>
+        <div className="flex items-center justify-start md:justify-center gap-4 mt-1 w-full md:w-auto">
+             <div className="h-[1px] w-8 bg-gray-400 hidden md:block"></div>
              <p className="text-[8px] md:text-[10px] font-sans tracking-[0.2em] text-gray-500 uppercase">Est. 2025 &bull; Global Edition</p>
-             <div className="h-[1px] w-8 bg-gray-400"></div>
+             <div className="h-[1px] w-8 bg-gray-400 hidden md:block"></div>
         </div>
       </div>
 
