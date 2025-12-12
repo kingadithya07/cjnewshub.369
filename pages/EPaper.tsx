@@ -1,33 +1,38 @@
 
-import React, { useRef, useState, useMemo } from 'react';
-import Cropper from 'react-cropper';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
+import Cropper from 'cropperjs';
 import { useNews } from '../context/NewsContext';
-import { Download, Scissors, X, ChevronLeft, ChevronRight, ArrowLeft, Calendar, ZoomIn, ZoomOut, Maximize, Share2, Check, Lock, LayoutGrid, Eye } from 'lucide-react';
+import { Download, Scissors, X, ChevronLeft, ChevronRight, ArrowLeft, Calendar, ZoomIn, ZoomOut, Maximize, Share2, Check, Lock, LayoutGrid, Eye, ArrowUpDown, ArrowLeftRight, Upload, Image as ImageIcon, Copy, Link as LinkIcon, Facebook, Twitter, Settings, Type } from 'lucide-react';
 import { Clipping } from '../types';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { AdSpace } from '../components/AdSpace';
 import { AdSize } from '../types';
 
 export const EPaper: React.FC = () => {
   const { ePaperPages, addClipping, clippings, watermarkSettings, currentUser } = useNews();
   
-  // Determine available dates
+  // Determine available dates (for reference, though we default to today)
   const availableDates = useMemo(() => {
     const dates = Array.from(new Set(ePaperPages.map(p => p.date)));
     return dates.sort((a: string, b: string) => b.localeCompare(a)); // Descending
   }, [ePaperPages]);
 
-  // Determine initial date (latest available)
+  // Determine initial date: Always default to Today's date in local time
   const initialDate = useMemo(() => {
-    if (availableDates.length === 0) return new Date().toISOString().split('T')[0];
-    return availableDates[0];
-  }, [availableDates]);
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
 
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   
   // View Mode State: 'grid' (all pages) or 'single' (focused page)
   const [viewMode, setViewMode] = useState<'grid' | 'single'>('grid');
+  // Fit Mode: 'width' (Readable, scrollable) or 'height' (Full page fit)
+  const [fitMode, setFitMode] = useState<'width' | 'height'>('width');
 
   // Viewer State
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -36,9 +41,18 @@ export const EPaper: React.FC = () => {
   // Modal / Preview State
   const [previewClip, setPreviewClip] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  // Custom Header State (Admin Only)
+  const [headerImage, setHeaderImage] = useState<string | null>(null);
+  const [headerText, setHeaderText] = useState<string>('');
+  const [showHeaderOptions, setShowHeaderOptions] = useState(false);
 
   const navigate = useNavigate();
-  const cropperRef = useRef<any>(null);
+  
+  // Cropper refs
+  const imageRef = useRef<HTMLImageElement>(null);
+  const cropperInstance = useRef<Cropper | null>(null);
 
   const myClippings = useMemo(() => {
       if (!currentUser) return clippings.filter(c => !c.userId); 
@@ -47,6 +61,7 @@ export const EPaper: React.FC = () => {
 
   // Format ISO YYYY-MM-DD to DD-MM-YYYY
   const formatDateDisplay = (ymd: string) => {
+    if (!ymd) return '';
     const parts = ymd.split('-');
     if (parts.length !== 3) return ymd;
     const [y, m, d] = parts;
@@ -61,6 +76,41 @@ export const EPaper: React.FC = () => {
   }, [ePaperPages, selectedDate]);
 
   const currentPage = currentIssuePages[currentPageIndex];
+
+  // Initialize Cropper when cropping starts
+  useEffect(() => {
+    if (isCropping && imageRef.current && currentPage) {
+        // Destroy existing instance if any (safeguard)
+        if (cropperInstance.current) {
+            cropperInstance.current.destroy();
+        }
+
+        cropperInstance.current = new Cropper(imageRef.current, {
+            viewMode: 1,
+            dragMode: 'move',
+            background: false,
+            autoCropArea: 0.5,
+            guides: true,
+            rotatable: false,
+            scalable: true,
+            zoomable: true, // Enabled zooming
+            wheelZoomRatio: 0.1,
+        });
+    } else {
+        // Clean up when leaving cropping mode
+        if (cropperInstance.current) {
+            cropperInstance.current.destroy();
+            cropperInstance.current = null;
+        }
+    }
+
+    return () => {
+        if (cropperInstance.current) {
+            cropperInstance.current.destroy();
+            cropperInstance.current = null;
+        }
+    };
+  }, [isCropping, currentPage]); // Re-init if page changes while cropping
 
   if (ePaperPages.length === 0) {
       return (
@@ -77,12 +127,15 @@ export const EPaper: React.FC = () => {
       setViewMode('grid'); // Reset to grid on date change
       setIsCropping(false);
       setZoomLevel(1);
+      setHeaderImage(null);
+      setHeaderText('');
   };
 
   const handlePageClick = (index: number) => {
       setCurrentPageIndex(index);
       setViewMode('single');
       setZoomLevel(1);
+      setFitMode('width'); // Default to width for better readability
       setIsCropping(false);
   };
 
@@ -90,177 +143,256 @@ export const EPaper: React.FC = () => {
       setViewMode('grid');
       setIsCropping(false);
       setZoomLevel(1);
+      setHeaderImage(null);
+      setHeaderText('');
   };
 
   const handleNext = () => {
-    if (currentPageIndex < currentIssuePages.length - 1) setCurrentPageIndex(prev => prev + 1);
+    if (currentPageIndex < currentIssuePages.length - 1) {
+        setCurrentPageIndex(prev => prev + 1);
+        setIsCropping(false);
+        setHeaderImage(null);
+        setHeaderText('');
+    }
   };
 
   const handlePrev = () => {
-    if (currentPageIndex > 0) setCurrentPageIndex(prev => prev - 1);
+    if (currentPageIndex > 0) {
+        setCurrentPageIndex(prev => prev - 1);
+        setIsCropping(false);
+        setHeaderImage(null);
+        setHeaderText('');
+    }
   };
 
-  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.5, 3.5));
-  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.5, 1));
+  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.25, 3));
+  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
   const handleResetZoom = () => setZoomLevel(1);
 
+  // Cropper specific zoom
+  const handleCropperZoomIn = () => cropperInstance.current?.zoom(0.1);
+  const handleCropperZoomOut = () => cropperInstance.current?.zoom(-0.1);
+
+  const handleHeaderImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (readerEvent) => {
+              if (readerEvent.target?.result) {
+                  setHeaderImage(readerEvent.target.result as string);
+              }
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
   const handleCrop = async () => {
-    const cropper = cropperRef.current?.cropper;
+    const cropper = cropperInstance.current;
     if (cropper) {
-        const canvas = cropper.getCroppedCanvas();
+        // Optimized settings for speed: removed imageSmoothingQuality: 'high'
+        const canvas = cropper.getCroppedCanvas({
+            fillColor: '#FFFFFF', // Ensure no transparency
+        });
+
         if (!canvas) {
             alert("Could not create clip. Please ensure the image is fully loaded and a crop area is selected.");
             return;
         }
 
         try {
-            // Create a new canvas to add watermark (Site Name + Date)
-            const watermarkHeight = 60;
+            // --- DYNAMIC SCALING LOGIC ---
+            // We scale UI elements based on the clip width to ensure readability
+            // Reference width is 1000px.
+            const scale = Math.max(0.8, canvas.width / 1000);
+            
+            // Increased Height from 100 to 150 to accommodate larger text
+            const bottomStripHeight = Math.round(150 * scale);
+            const topStripHeight = (headerImage || headerText) ? Math.round(120 * scale) : 0; 
+            const padding = Math.round(30 * scale);
+            
+            const totalWidth = canvas.width;
+            const totalHeight = canvas.height + bottomStripHeight + topStripHeight;
+
+            // Create Final Canvas
             const finalCanvas = document.createElement('canvas');
-            finalCanvas.width = canvas.width;
-            finalCanvas.height = canvas.height + watermarkHeight;
+            finalCanvas.width = totalWidth;
+            finalCanvas.height = totalHeight;
 
             const ctx = finalCanvas.getContext('2d');
             if (ctx) {
-                // Draw original cropped image
-                ctx.drawImage(canvas, 0, 0);
+                // 1. Fill Entire Background with White
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
 
-                // Draw Watermark Background
-                ctx.fillStyle = '#1A1A1A'; // Ink Color
-                ctx.fillRect(0, canvas.height, finalCanvas.width, watermarkHeight);
+                // 2. Draw Top Header Strip (if enabled)
+                if (topStripHeight > 0) {
+                    if (headerImage) {
+                         const headerImg = new Image();
+                         headerImg.src = headerImage;
+                         await new Promise((resolve) => {
+                             headerImg.onload = resolve;
+                             headerImg.onerror = resolve; 
+                         });
 
-                let textStartX = 20;
+                         // Draw image centered in the top strip, maintaining aspect ratio
+                         const hRatio = totalWidth / headerImg.naturalWidth;
+                         const vRatio = topStripHeight / headerImg.naturalHeight;
+                         // Use a slightly smaller ratio to leave some padding
+                         const ratio = Math.min(hRatio, vRatio) * 0.9; 
+                         
+                         const drawWidth = headerImg.naturalWidth * ratio;
+                         const drawHeight = headerImg.naturalHeight * ratio;
+                         
+                         // Center vertically and horizontally in the top strip
+                         const centerX = (totalWidth - drawWidth) / 2;
+                         const centerY = (topStripHeight - drawHeight) / 2;
 
-                // Draw Watermark Logo if present from Global Context
+                         ctx.drawImage(headerImg, centerX, centerY, drawWidth, drawHeight);
+                    } else if (headerText) {
+                         // Draw Text
+                         ctx.fillStyle = '#1A1A1A'; 
+                         const headerFontSize = Math.round(48 * scale);
+                         ctx.font = `bold ${headerFontSize}px "Playfair Display", serif`;
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+                         ctx.fillText(headerText, totalWidth / 2, topStripHeight / 2);
+                    }
+                }
+
+                // 3. Draw The Cropped Article
+                ctx.drawImage(canvas, 0, topStripHeight);
+
+                // 4. Draw Bottom Footer Strip
+                const footerY = topStripHeight + canvas.height;
+                
+                // Separator Line
+                ctx.beginPath();
+                ctx.moveTo(0, footerY);
+                ctx.lineTo(totalWidth, footerY);
+                ctx.strokeStyle = '#E5E5E5';
+                ctx.lineWidth = 2 * scale;
+                ctx.stroke();
+
+                let textStartX = padding;
+
+                // 4a. Draw Logo (if exists)
                 if (watermarkSettings.logoUrl) {
                     const logoImg = new Image();
                     logoImg.src = watermarkSettings.logoUrl;
-                    await new Promise((resolve) => {
-                        logoImg.onload = resolve;
-                        logoImg.onerror = resolve; // proceed even if fail
-                    });
-
-                    // Fit logo to height 40px
-                    const logoH = 40;
-                    const scale = logoH / logoImg.naturalHeight;
-                    const logoW = logoImg.naturalWidth * scale;
-                    
-                    // Center logo vertically in watermark area
-                    const logoY = canvas.height + (watermarkHeight - logoH) / 2;
-                    
-                    ctx.drawImage(logoImg, textStartX, logoY, logoW, logoH);
-                    textStartX += logoW + 15; // Move text start position
+                    try {
+                        await new Promise((resolve, reject) => {
+                            logoImg.onload = resolve;
+                            logoImg.onerror = resolve; // Continue even if error
+                        });
+                        
+                        const logoH = bottomStripHeight * 0.6; // 60% of strip height
+                        const logoScale = logoH / logoImg.naturalHeight;
+                        const logoW = logoImg.naturalWidth * logoScale;
+                        const logoY = footerY + (bottomStripHeight - logoH) / 2;
+                        
+                        ctx.drawImage(logoImg, textStartX, logoY, logoW, logoH);
+                        textStartX += logoW + padding;
+                    } catch (e) {
+                        console.warn("Logo load failed", e);
+                    }
                 }
 
-                // Draw Watermark Text from Global Context
-                if (watermarkSettings.text) {
-                    ctx.fillStyle = '#B89E72'; // Gold Color
-                    ctx.font = 'bold 24px "Playfair Display", serif';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(watermarkSettings.text, textStartX, canvas.height + (watermarkHeight / 2));
-                }
+                // 4b. Draw Text (Site Name) - Ink Color #1A1A1A
+                const siteName = watermarkSettings.text || "CJ NEWS HUB";
+                ctx.fillStyle = '#1A1A1A'; 
+                // Font Size Increased from 36 to 60
+                const nameFontSize = Math.round(60 * scale);
+                ctx.font = `bold ${nameFontSize}px "Playfair Display", serif`;
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'left'; // Reset alignment
+                ctx.fillText(siteName, textStartX, footerY + (bottomStripHeight / 2));
 
-                // Draw Date
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = '14px "Lato", sans-serif';
-                ctx.textAlign = 'right';
-                // Format date for watermark as DD-MM-YYYY
+                // 4c. Draw Date - Grey text, Right aligned
                 const formattedDate = formatDateDisplay(selectedDate);
-                ctx.fillText(formattedDate, finalCanvas.width - 20, canvas.height + (watermarkHeight / 2));
+                ctx.fillStyle = '#4B5563'; // Tailwind Gray-600
+                // Font Size Increased from 20 to 34
+                const dateFontSize = Math.round(34 * scale);
+                ctx.font = `bold ${dateFontSize}px "Lato", sans-serif`;
+                ctx.textAlign = 'right';
+                ctx.fillText(formattedDate, finalCanvas.width - padding, footerY + (bottomStripHeight / 2));
             }
 
-            const watermarkedImage = finalCanvas.toDataURL('image/png');
+            // Export (Slightly reduced quality 0.95 -> 0.90 for speed)
+            const watermarkedImage = finalCanvas.toDataURL('image/jpeg', 0.90); 
             setPreviewClip(watermarkedImage);
+            setIsSaved(false); // Reset save state
             setShowShareModal(true);
             setIsCropping(false);
+            setShowHeaderOptions(false); // Hide settings if open
 
         } catch (error) {
             console.error("Error creating clip:", error);
-            alert("Failed to save clip due to image security restrictions.");
+            alert("Failed to save clip due to browser security restrictions on the image.");
         }
     }
   };
 
   const saveClippingToSidebar = () => {
       if (!currentUser) {
-          // Redirect to subscribe if not logged in
-          if(confirm("You must be a subscriber to save clippings to your account. Would you like to subscribe now?")) {
-              navigate('/subscribe');
+          // If not logged in, show confirm and redirect
+          if(confirm("Sign in to save clippings to your personal notebook?")) {
+              navigate('/login');
           }
           return;
       }
 
-      if (previewClip) {
+      if (previewClip && !isSaved) {
           const newClipping: Clipping = {
               id: Date.now().toString(),
               dataUrl: previewClip,
               timestamp: Date.now()
           };
           addClipping(newClipping);
-          setShowShareModal(false);
-          setPreviewClip(null);
-          // Optional: reset zoom
-          setZoomLevel(1);
+          setIsSaved(true);
       }
   };
 
-  const downloadClipping = (dataUrl: string, filenamePrefix: string = 'cj-news-clip') => {
+  const downloadClipping = () => {
+      if (!previewClip) return;
       const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `${filenamePrefix}-${Date.now()}.png`;
+      link.href = previewClip;
+      link.download = `cj-news-clip-${Date.now()}.jpg`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
   };
 
-  const handleShare = async (platform?: string) => {
+  const copyLinkToClipboard = async () => {
+       // Since we are using DataURLs for this demo (no cloud storage upload), 
+       // we can't truly share a "link" to the image. 
+       // We will simulate copying the page URL + text.
+       const text = `Read this article on CJ News Hub: ${window.location.href}`;
+       try {
+           await navigator.clipboard.writeText(text);
+           alert("Link copied to clipboard!");
+       } catch (err) {
+           console.error("Failed to copy", err);
+       }
+  };
+
+  const handleSocialShare = (platform: string) => {
     if (!previewClip) return;
-
-    // Convert Base64 to Blob for native sharing
-    const fetchRes = await fetch(previewClip);
-    const blob = await fetchRes.blob();
-    const file = new File([blob], "clipping.png", { type: "image/png" });
-
-    const formattedDate = formatDateDisplay(selectedDate);
-
-    const shareData = {
-        title: 'CJ News Hub Clipping',
-        text: `Read this article from CJ News Hub edition dated ${formattedDate}.`,
-        url: window.location.href,
-    };
-
-    if (platform === 'native' && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({
-                ...shareData,
-                files: [file]
-            });
-        } catch (err) {
-            console.log('Error sharing:', err);
-        }
-    } else {
-        // Fallback for social buttons (cannot upload image directly via URL params, so we share link)
-        let url = '';
-        const text = encodeURIComponent(`Check out this clipping from CJ News Hub (${formattedDate})`);
-        const currentUrl = encodeURIComponent(window.location.href);
-
-        switch (platform) {
-            case 'facebook':
-                url = `https://www.facebook.com/sharer/sharer.php?u=${currentUrl}`;
-                break;
-            case 'twitter':
-                url = `https://twitter.com/intent/tweet?text=${text}&url=${currentUrl}`;
-                break;
-            case 'linkedin':
-                url = `https://www.linkedin.com/sharing/share-offsite/?url=${currentUrl}`;
-                break;
-            case 'whatsapp':
-                url = `https://wa.me/?text=${text}%20${currentUrl}`;
-                break;
-        }
-        
-        if (url) window.open(url, '_blank', 'width=600,height=400');
+    const currentUrl = encodeURIComponent(window.location.href);
+    const text = encodeURIComponent(`Check out this news from CJ News Hub edition ${formatDateDisplay(selectedDate)}.`);
+    
+    let url = '';
+    switch (platform) {
+        case 'facebook':
+            url = `https://www.facebook.com/sharer/sharer.php?u=${currentUrl}`;
+            break;
+        case 'twitter':
+            url = `https://twitter.com/intent/tweet?text=${text}&url=${currentUrl}`;
+            break;
+        case 'whatsapp':
+            url = `https://wa.me/?text=${text}%20${currentUrl}`;
+            break;
     }
+    if (url) window.open(url, '_blank', 'width=600,height=400');
   };
 
   return (
@@ -307,13 +439,22 @@ export const EPaper: React.FC = () => {
         {/* Right: Tools & Page Info */}
         <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
              
-            {/* Zoom Controls (Only visible in SINGLE VIEW and NOT cropping) */}
+            {/* View Controls (Only in SINGLE VIEW and NOT cropping) */}
             {viewMode === 'single' && !isCropping && currentIssuePages.length > 0 && (
-                <div className="flex items-center bg-gray-700 rounded mr-2">
+                <div className="flex items-center bg-gray-700 rounded mr-2 divide-x divide-gray-600">
+                    <button 
+                        onClick={() => setFitMode(fitMode === 'width' ? 'height' : 'width')} 
+                        className="p-2 hover:text-gold flex items-center gap-1" 
+                        title={fitMode === 'width' ? "Fit to Page Height" : "Fit to Width (Readable)"}
+                    >
+                        {fitMode === 'width' ? <ArrowUpDown size={16}/> : <ArrowLeftRight size={16}/>}
+                        <span className="text-xs font-bold hidden sm:inline">{fitMode === 'width' ? 'Fit Page' : 'Fit Width'}</span>
+                    </button>
+
                     <button onClick={handleZoomOut} className="p-2 hover:text-gold" title="Zoom Out"><ZoomOut size={16}/></button>
-                    <span className="text-xs w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
+                    <span className="text-xs w-10 text-center">{Math.round(zoomLevel * 100)}%</span>
                     <button onClick={handleZoomIn} className="p-2 hover:text-gold" title="Zoom In"><ZoomIn size={16}/></button>
-                    <button onClick={handleResetZoom} className="p-2 hover:text-gold border-l border-gray-600" title="Reset"><Maximize size={16}/></button>
+                    <button onClick={handleResetZoom} className="p-2 hover:text-gold" title="Reset"><Maximize size={16}/></button>
                 </div>
             )}
 
@@ -333,9 +474,70 @@ export const EPaper: React.FC = () => {
             
             {isCropping && (
                 <div className="flex gap-2 items-center relative">
+                    
+                    {/* Header Settings - Admin Only */}
+                    {currentUser?.role === 'admin' && (
+                        <div className="relative">
+                            <button 
+                                onClick={() => setShowHeaderOptions(!showHeaderOptions)}
+                                className={`flex items-center gap-1 px-3 py-2 rounded-sm text-xs font-bold transition-colors ${headerImage || headerText ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}
+                                title="Add Header Image or Text"
+                            >
+                                <Settings size={16} />
+                                <span className="hidden sm:inline">Header</span>
+                            </button>
+                            
+                            {showHeaderOptions && (
+                                <div className="absolute top-full right-0 mt-2 w-72 bg-white text-ink p-4 rounded shadow-xl z-50 border border-gray-200 animate-in fade-in zoom-in-95 duration-200">
+                                    <h4 className="font-bold text-xs uppercase mb-3 border-b pb-1 text-ink flex justify-between items-center">
+                                        Header Settings
+                                        <button onClick={() => setShowHeaderOptions(false)}><X size={14}/></button>
+                                    </h4>
+                                    
+                                    <div className="mb-4">
+                                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 flex items-center gap-1"><ImageIcon size={12}/> Upload Image</label>
+                                        <input type="file" accept="image/*" onChange={handleHeaderImageUpload} className="text-xs w-full text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
+                                        {headerImage && <button onClick={() => setHeaderImage(null)} className="text-[10px] text-red-600 underline mt-1 block w-full text-right">Remove Image</button>}
+                                    </div>
+
+                                    <div className="relative flex py-2 items-center">
+                                        <div className="flex-grow border-t border-gray-200"></div>
+                                        <span className="flex-shrink-0 mx-2 text-gray-400 text-[10px] font-bold">OR</span>
+                                        <div className="flex-grow border-t border-gray-200"></div>
+                                    </div>
+
+                                    <div className="mb-1">
+                                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 flex items-center gap-1"><Type size={12}/> Header Text</label>
+                                        <input 
+                                            type="text" 
+                                            value={headerText} 
+                                            onChange={(e) => setHeaderText(e.target.value)}
+                                            placeholder="e.g. BREAKING NEWS"
+                                            className="w-full border p-2 text-sm rounded focus:ring-1 focus:ring-gold outline-none"
+                                        />
+                                        {headerText && <button onClick={() => setHeaderText('')} className="text-[10px] text-red-600 underline mt-1 block w-full text-right">Clear Text</button>}
+                                    </div>
+                                    
+                                    <div className="text-[9px] text-gray-400 italic mt-2 bg-gray-50 p-1.5 rounded border border-gray-100">
+                                        Note: Image takes precedence if both are set. Background will be white.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Crop Zoom Controls */}
+                    <div className="flex items-center bg-gray-700 rounded mr-2 divide-x divide-gray-600">
+                         <button onClick={handleCropperZoomOut} className="p-2 hover:text-gold" title="Zoom Out"><ZoomOut size={16}/></button>
+                         <button onClick={handleCropperZoomIn} className="p-2 hover:text-gold" title="Zoom In"><ZoomIn size={16}/></button>
+                    </div>
+
                     <button 
                         onClick={() => {
                             setIsCropping(false);
+                            setHeaderImage(null);
+                            setHeaderText('');
+                            setShowHeaderOptions(false);
                         }}
                         className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-sm text-xs font-bold"
                     >
@@ -399,7 +601,7 @@ export const EPaper: React.FC = () => {
 
                     {/* --- SINGLE VIEW MODE --- */}
                     {viewMode === 'single' && (
-                        <div className="relative w-full h-full flex items-center justify-center bg-[#444] p-0 md:p-8">
+                        <div className="relative w-full h-full bg-[#444]">
                             {/* Navigation Buttons (Overlay) */}
                             {!isCropping && (
                                 <>
@@ -421,34 +623,35 @@ export const EPaper: React.FC = () => {
                             )}
 
                             {isCropping ? (
-                                <div className="w-full h-full bg-black p-4 z-20">
-                                    <Cropper
-                                        src={currentPage.imageUrl}
-                                        style={{ height: '100%', width: '100%' }}
-                                        initialAspectRatio={NaN} // Free crop
-                                        guides={true}
-                                        ref={cropperRef}
-                                        viewMode={1}
-                                        dragMode="move"
-                                        background={false}
-                                        autoCropArea={0.5}
-                                        checkCrossOrigin={true} 
-                                    />
+                                <div className="w-full h-full bg-black p-4 z-20 flex items-center justify-center">
+                                    {/* Direct Image for CropperJS initialization */}
+                                    <div className="w-full h-full">
+                                        <img 
+                                            ref={imageRef}
+                                            src={currentPage.imageUrl}
+                                            alt="Crop Source"
+                                            className="block max-w-full" 
+                                            // Let CropperJS manage dimensions via viewMode
+                                        />
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="w-full h-full overflow-auto flex items-center justify-center">
+                                <div className={`w-full h-full overflow-auto flex ${fitMode === 'height' ? 'items-center' : 'items-start pt-4'} justify-center`}>
                                     <div 
                                         style={{ 
                                             transform: `scale(${zoomLevel})`, 
                                             transformOrigin: 'top center',
                                             transition: 'transform 0.2s ease-out'
                                         }}
-                                        className="shadow-2xl"
+                                        className="shadow-2xl bg-white transition-all duration-300"
                                     >
                                         <img 
                                             src={currentPage.imageUrl} 
                                             alt={`Page ${currentPage.pageNumber}`} 
-                                            className="max-w-full max-h-[85vh] object-contain border-2 border-gray-700 bg-white"
+                                            className={fitMode === 'height' 
+                                                ? "max-w-full max-h-[90vh] object-contain border-2 border-gray-700 bg-white" 
+                                                : "w-full md:w-auto h-auto max-w-4xl object-contain border-2 border-gray-700 bg-white"
+                                            }
                                         />
                                     </div>
                                 </div>
@@ -494,11 +697,16 @@ export const EPaper: React.FC = () => {
                         <div className="space-y-4">
                             {myClippings.map((clip) => (
                                 <div key={clip.id} className="bg-[#333] p-2 rounded border border-gray-700 group relative">
-                                    <img src={clip.dataUrl} className="w-full h-auto mb-2 opacity-90 group-hover:opacity-100" />
+                                    <img src={clip.dataUrl} className="w-full h-auto mb-2 opacity-90 group-hover:opacity-100 bg-white" />
                                     <div className="flex justify-between items-center text-[10px] text-gray-400">
                                         <span>{new Date(clip.timestamp).toLocaleTimeString()}</span>
                                         <button 
-                                            onClick={() => downloadClipping(clip.dataUrl, clip.id)}
+                                            onClick={() => {
+                                                const link = document.createElement('a');
+                                                link.href = clip.dataUrl;
+                                                link.download = `cj-news-clip-${clip.id}.jpg`;
+                                                link.click();
+                                            }}
                                             className="text-white hover:text-gold flex items-center gap-1"
                                         >
                                             <Download size={12} /> Save
@@ -517,72 +725,103 @@ export const EPaper: React.FC = () => {
             </div>
         </div>
 
-        {/* --- CLIPPING PREVIEW & SHARE MODAL --- */}
+        {/* --- REDESIGNED COMPACT CLIPPING PREVIEW MODAL --- */}
         {showShareModal && previewClip && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col md:flex-row overflow-hidden">
                     
-                    {/* Modal Header */}
-                    <div className="flex justify-between items-center p-4 border-b border-gray-200">
-                        <h3 className="font-serif font-bold text-xl text-ink">Clip Preview</h3>
+                    {/* Left: Image Preview */}
+                    <div className="flex-1 bg-gray-100 p-6 flex items-center justify-center relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(#9ca3af 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+                        <img 
+                            src={previewClip} 
+                            alt="Clipped Content" 
+                            className="max-w-full max-h-[60vh] md:max-h-full object-contain shadow-lg border-4 border-white transform hover:scale-[1.01] transition-transform duration-300" 
+                        />
                         <button 
                             onClick={() => {
                                 setShowShareModal(false);
                                 setPreviewClip(null);
                             }}
-                            className="text-gray-400 hover:text-red-600 transition-colors"
+                            className="absolute top-4 left-4 bg-white/80 p-2 rounded-full hover:bg-white text-gray-700 md:hidden z-10"
                         >
-                            <X size={24} />
+                            <X size={20} />
                         </button>
                     </div>
 
-                    {/* Modal Content */}
-                    <div className="flex-1 overflow-auto p-6 bg-gray-50 flex flex-col items-center">
-                        <div className="border border-gray-300 shadow-lg bg-white mb-6 max-w-full">
-                            <img src={previewClip} alt="Clipped Content" className="max-w-full h-auto" />
+                    {/* Right: Actions */}
+                    <div className="w-full md:w-64 bg-white border-l border-gray-200 flex flex-col z-10">
+                        {/* Header - Compact */}
+                        <div className="px-3 py-2 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                            <h3 className="font-serif font-bold text-base text-ink">Clip Ready</h3>
+                            <button 
+                                onClick={() => {
+                                    setShowShareModal(false);
+                                    setPreviewClip(null);
+                                }}
+                                className="p-1 rounded-full hover:bg-gray-200 text-gray-500 transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
                         </div>
 
-                        {/* Actions */}
-                        <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Content - Compact */}
+                        <div className="p-3 flex flex-col gap-2 overflow-y-auto">
                             
-                            {/* Primary Actions */}
-                            <div className="space-y-3">
-                                <button 
-                                    onClick={saveClippingToSidebar}
-                                    className="w-full flex items-center justify-center gap-2 bg-ink text-white py-3 rounded text-sm font-bold uppercase tracking-wider hover:bg-gold hover:text-ink transition-colors relative"
-                                >
-                                    {!currentUser && <Lock size={14} className="absolute left-4"/>}
-                                    <Check size={16} /> Save to Sidebar
-                                </button>
-                                <button 
-                                    onClick={() => downloadClipping(previewClip)}
-                                    className="w-full flex items-center justify-center gap-2 border-2 border-ink text-ink py-3 rounded text-sm font-bold uppercase tracking-wider hover:bg-gray-100 transition-colors"
-                                >
-                                    <Download size={16} /> Download Image
-                                </button>
-                            </div>
-
-                            {/* Share Actions */}
-                            <div className="bg-gray-100 p-4 rounded border border-gray-200">
-                                <h4 className="text-xs font-bold uppercase text-gray-500 mb-3 flex items-center gap-2">
-                                    <Share2 size={12} /> Share Clipping
-                                </h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {/* Native Share (Mobile) */}
-                                    <button onClick={() => handleShare('native')} className="col-span-2 bg-blue-600 text-white py-2 rounded text-xs font-bold hover:bg-blue-700 flex items-center justify-center gap-1">
-                                        <Share2 size={14} /> Share via App
+                            <div className="grid grid-cols-2 gap-2">
+                                {/* Save Action */}
+                                {isSaved ? (
+                                    <button disabled className="col-span-1 bg-green-100 text-green-700 py-2 rounded font-bold text-xs flex flex-col items-center justify-center gap-1 cursor-default border border-green-200 h-16">
+                                        <Check size={16} /> <span>Saved</span>
                                     </button>
+                                ) : (
+                                    <button 
+                                        onClick={saveClippingToSidebar}
+                                        className={`col-span-1 py-2 rounded font-bold text-xs flex flex-col items-center justify-center gap-1 transition-all h-16 ${currentUser ? 'bg-ink text-white hover:bg-gold hover:text-ink shadow-sm' : 'bg-white border border-ink text-ink hover:bg-gray-50'}`}
+                                        title={currentUser ? "Save to Notebook" : "Sign in to Save"}
+                                    >
+                                        {currentUser ? (
+                                            <><Check size={16} /> <span>Save</span></>
+                                        ) : (
+                                            <><Lock size={16} /> <span>Save</span></>
+                                        )}
+                                    </button>
+                                )}
 
-                                    {/* Social Links */}
-                                    <button onClick={() => handleShare('whatsapp')} className="bg-[#25D366] text-white py-2 rounded text-xs font-bold hover:bg-[#128C7E]">WhatsApp</button>
-                                    <button onClick={() => handleShare('facebook')} className="bg-[#1877F2] text-white py-2 rounded text-xs font-bold hover:bg-[#166FE5]">Facebook</button>
-                                    <button onClick={() => handleShare('twitter')} className="bg-[#000000] text-white py-2 rounded text-xs font-bold hover:bg-[#333]">X (Twitter)</button>
-                                    <button onClick={() => handleShare('linkedin')} className="bg-[#0A66C2] text-white py-2 rounded text-xs font-bold hover:bg-[#004182]">LinkedIn</button>
-                                </div>
-                                <p className="text-[10px] text-gray-400 mt-2 text-center leading-tight">
-                                    *Social buttons share the article link. Use "Share via App" or "Download" to share the actual image.
-                                </p>
+                                {/* Download Action */}
+                                <button 
+                                    onClick={downloadClipping}
+                                    className="col-span-1 bg-blue-600 text-white py-2 rounded font-bold text-xs flex flex-col items-center justify-center gap-1 hover:bg-blue-700 shadow-sm transition-colors h-16"
+                                >
+                                    <Download size={16} /> <span>Download</span>
+                                </button>
                             </div>
+
+                            {/* Share Grid - Compact */}
+                            <div className="bg-gray-50 p-2 rounded border border-gray-100 mt-1">
+                                <p className="text-[9px] font-bold uppercase text-gray-400 mb-2 text-center tracking-widest">Share</p>
+                                <div className="flex justify-between px-2">
+                                    <button onClick={() => handleSocialShare('whatsapp')} className="text-[#25D366] hover:scale-110 transition-transform" title="WhatsApp">
+                                        <Share2 size={20} />
+                                    </button>
+                                    <button onClick={() => handleSocialShare('facebook')} className="text-[#1877F2] hover:scale-110 transition-transform" title="Facebook">
+                                        <Facebook size={20} />
+                                    </button>
+                                    <button onClick={() => handleSocialShare('twitter')} className="text-black hover:scale-110 transition-transform" title="X (Twitter)">
+                                        <Twitter size={20} />
+                                    </button>
+                                    <button onClick={copyLinkToClipboard} className="text-gray-600 hover:scale-110 transition-transform" title="Copy Link">
+                                        <LinkIcon size={20} />
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {!currentUser && (
+                                <RouterLink to="/subscribe" className="text-[9px] text-center text-blue-600 underline mt-1">
+                                    Login to sync clips
+                                </RouterLink>
+                            )}
+
                         </div>
                     </div>
                 </div>

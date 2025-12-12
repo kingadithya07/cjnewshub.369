@@ -139,7 +139,9 @@ export const Header: React.FC = () => {
 
         {/* Right Side Tools: Weather + Subscribe */}
         <div className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
-            <WeatherWidget />
+            <div className="md:hidden">
+                <WeatherWidget />
+            </div>
             
             {!currentUser && (
                 <Link to="/subscribe" className="hidden md:flex flex-col items-center justify-center bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 rounded shadow-md transform hover:scale-105 transition-all">

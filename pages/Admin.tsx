@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNews } from '../context/NewsContext';
 import { Article, EPaperPage, User, Advertisement, AdSize, Classified } from '../types';
-import { Trash2, Upload, FileText, Image as ImageIcon, Sparkles, Video, Save, Edit, CheckCircle, Calendar, Users, Ban, Power, Shield, ShieldAlert, Settings, Mail, DollarSign, CreditCard, Film, Type, X, Megaphone, Star, BarChart3, Inbox, MessageSquare, Tag, Plus, Briefcase, MapPin, Eye, MonitorOff } from 'lucide-react';
+import { Trash2, Upload, FileText, Image as ImageIcon, Sparkles, Video, Save, Edit, CheckCircle, Calendar, Users, Ban, Power, Shield, ShieldAlert, Settings, Mail, DollarSign, CreditCard, Film, Type, X, Megaphone, Star, BarChart3, Inbox, MessageSquare, Tag, Plus, Briefcase, MapPin, Eye, MonitorOff, Globe } from 'lucide-react';
 import { CHIEF_EDITOR_ID } from '../constants';
 import { Link } from 'react-router-dom';
 import { RichTextEditor } from '../components/RichTextEditor';
@@ -239,15 +239,27 @@ export const Admin: React.FC = () => {
       }
   };
 
-  const handleArticleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!articleForm.title || !articleForm.excerpt) return;
+  const handleArticleSubmit = async (statusOverride?: 'draft' | 'published') => {
+      if (!articleForm.title || !articleForm.excerpt) {
+          alert("Title and Excerpt are required.");
+          return;
+      }
       setIsSubmitting(true);
 
       const finalTags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
       const now = new Date();
       const todayStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
       const finalImage = articleForm.imageUrl || `https://picsum.photos/800/600?random=${Date.now()}`;
+
+      // Determine Status: Use override if provided (button click), else form value, else default
+      let finalStatus: 'draft' | 'published' | 'pending' = 'pending';
+      
+      if (isAdmin) {
+          finalStatus = statusOverride || articleForm.status || 'draft';
+      } else {
+          // Publishers default to pending unless they have override (if logic allowed)
+          finalStatus = 'pending';
+      }
 
       const articleData: Article = {
           id: editingId || Date.now().toString(),
@@ -261,17 +273,17 @@ export const Admin: React.FC = () => {
           imageUrl: finalImage,
           videoUrl: articleForm.videoUrl,
           tags: finalTags,
-          status: articleForm.status || 'draft',
+          status: finalStatus,
           isFeatured: articleForm.isFeatured || false,
           views: editingId ? (articleForm.views || 0) : 0
       };
 
       if (editingId) {
           await updateArticle(articleData);
-          alert('Article updated successfully!');
+          alert(`Article updated successfully as ${finalStatus.toUpperCase()}!`);
       } else {
           await addArticle(articleData);
-          alert('Article created successfully!');
+          alert(`Article created successfully as ${finalStatus.toUpperCase()}!`);
       }
       setIsSubmitting(false);
       handleCancelEdit();
@@ -550,7 +562,8 @@ export const Admin: React.FC = () => {
                       <FileText size={20}/> {editingId ? 'Edit Article' : 'New Article'}
                   </h3>
                   
-                  <form onSubmit={handleArticleSubmit} className="space-y-6">
+                  {/* Replaced onSubmit form with div to prevent default submit and use custom handlers on buttons */}
+                  <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                               <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Title</label>
@@ -618,13 +631,30 @@ export const Admin: React.FC = () => {
                                 <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Tags (Comma Separated)</label>
                                 <input type="text" placeholder="News, Politics, Local" className="w-full border p-3 text-sm focus:ring-1 focus:ring-gold outline-none" value={tagsInput} onChange={e => setTagsInput(e.target.value)} />
                            </div>
-                           <div className="flex items-center gap-4 pt-6">
-                                <label className="flex items-center gap-2 cursor-pointer select-none">
-                                    <input type="checkbox" checked={articleForm.isFeatured || false} onChange={e => setArticleForm({...articleForm, isFeatured: e.target.checked})} className="w-4 h-4 accent-gold" />
-                                    <span className="text-sm font-bold text-gray-700">Feature on Homepage</span>
-                                </label>
-                           </div>
+                           
+                           {/* Status Selector - Visible to Admins */}
+                           {isAdmin && (
+                               <div>
+                                   <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Status</label>
+                                   <select 
+                                       className="w-full border p-3 text-sm outline-none bg-white font-bold" 
+                                       value={articleForm.status || 'draft'} 
+                                       onChange={e => setArticleForm({...articleForm, status: e.target.value as any})}
+                                   >
+                                       <option value="draft">Draft</option>
+                                       <option value="published">Published</option>
+                                       <option value="pending">Pending</option>
+                                   </select>
+                               </div>
+                           )}
                       </div>
+                      
+                      <div className="flex items-center gap-4 pt-2">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <input type="checkbox" checked={articleForm.isFeatured || false} onChange={e => setArticleForm({...articleForm, isFeatured: e.target.checked})} className="w-4 h-4 accent-gold" />
+                                <span className="text-sm font-bold text-gray-700">Feature on Homepage</span>
+                            </label>
+                       </div>
 
                       <div className="flex gap-4 pt-4 border-t border-gray-100">
                           {editingId && (
@@ -632,11 +662,38 @@ export const Admin: React.FC = () => {
                                   Cancel
                               </button>
                           )}
-                          <button type="submit" disabled={isSubmitting} className="flex-1 bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors disabled:opacity-70">
-                              {isSubmitting ? 'Saving...' : (editingId ? (isAdmin ? 'Update Article' : 'Submit Update') : (isAdmin ? 'Publish Article' : 'Submit for Review'))}
-                          </button>
+                          
+                          {isAdmin ? (
+                              <>
+                                <button 
+                                    type="button" 
+                                    onClick={() => handleArticleSubmit('draft')} 
+                                    disabled={isSubmitting} 
+                                    className="flex-1 bg-gray-500 text-white py-3 font-bold uppercase text-xs hover:bg-gray-600 transition-colors disabled:opacity-70"
+                                >
+                                    Save Draft
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => handleArticleSubmit('published')}
+                                    disabled={isSubmitting} 
+                                    className="flex-1 bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors disabled:opacity-70"
+                                >
+                                    {editingId ? 'Update & Publish' : 'Publish Now'}
+                                </button>
+                              </>
+                          ) : (
+                              <button 
+                                  type="button" 
+                                  onClick={() => handleArticleSubmit()}
+                                  disabled={isSubmitting} 
+                                  className="flex-1 bg-ink text-white py-3 font-bold uppercase text-xs hover:bg-gold hover:text-ink transition-colors disabled:opacity-70"
+                              >
+                                  {isSubmitting ? 'Saving...' : 'Submit for Review'}
+                              </button>
+                          )}
                       </div>
-                  </form>
+                  </div>
               </div>
 
               {/* List Section - Filtered for Publishers */}
@@ -652,7 +709,7 @@ export const Admin: React.FC = () => {
                                    <h4 className="font-bold text-sm text-ink line-clamp-2 mb-1">{article.title}</h4>
                                    <div className="flex justify-between items-center text-xs text-gray-500 mb-3">
                                        <span>{article.date}</span>
-                                       <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${article.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                       <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${article.status === 'published' ? 'bg-green-100 text-green-700' : article.status === 'draft' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-700'}`}>
                                            {article.status}
                                        </span>
                                    </div>

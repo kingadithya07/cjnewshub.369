@@ -15,6 +15,7 @@ interface WeatherWidgetProps {
 export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header' }) => {
     const [weather, setWeather] = useState<WeatherData | null>(null);
     const [aqi, setAqi] = useState<number | null>(null);
+    const [placeName, setPlaceName] = useState<string>('Local');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
 
@@ -28,6 +29,13 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
             try {
+                // Fetch Place Name (Reverse Geocoding)
+                // Using BigDataCloud's free client-side API for demo purposes as it doesn't require key/cors for this usage
+                const placeRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+                const placeData = await placeRes.json();
+                const city = placeData.city || placeData.locality || placeData.principalSubdivision || "Local";
+                setPlaceName(city);
+
                 // Fetch Weather from Open-Meteo
                 const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
                 const weatherData = await weatherRes.json();
@@ -56,15 +64,15 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
     }, []);
 
     const getWeatherIcon = (code: number, size: number = 14) => {
-        const className = variant === 'sidebar' ? "text-gold-dark" : "";
-        if (code <= 1) return <Sun size={size} className={variant === 'sidebar' ? "text-orange-500" : "text-orange-500"} />;
-        if (code <= 3) return <Cloud size={size} className={variant === 'sidebar' ? "text-gray-400" : "text-gray-500"} />;
-        if (code <= 48) return <Wind size={size} className={variant === 'sidebar' ? "text-gray-400" : "text-gray-400"} />;
-        if (code <= 67) return <CloudRain size={size} className={variant === 'sidebar' ? "text-blue-500" : "text-blue-500"} />;
-        if (code <= 77) return <CloudSnow size={size} className={variant === 'sidebar' ? "text-blue-300" : "text-blue-300"} />;
-        if (code <= 82) return <CloudRain size={size} className={variant === 'sidebar' ? "text-blue-600" : "text-blue-600"} />;
-        if (code <= 86) return <CloudSnow size={size} className={variant === 'sidebar' ? "text-blue-300" : "text-blue-300"} />;
-        if (code <= 99) return <CloudLightning size={size} className={variant === 'sidebar' ? "text-purple-500" : "text-purple-500"} />;
+        const className = variant === 'sidebar' ? "text-gold-dark" : "text-gold-dark";
+        if (code <= 1) return <Sun size={size} className="text-orange-500" />;
+        if (code <= 3) return <Cloud size={size} className="text-gray-400" />;
+        if (code <= 48) return <Wind size={size} className="text-gray-400" />;
+        if (code <= 67) return <CloudRain size={size} className="text-blue-500" />;
+        if (code <= 77) return <CloudSnow size={size} className="text-blue-300" />;
+        if (code <= 82) return <CloudRain size={size} className="text-blue-600" />;
+        if (code <= 86) return <CloudSnow size={size} className="text-blue-300" />;
+        if (code <= 99) return <CloudLightning size={size} className="text-purple-500" />;
         return <Sun size={size} className={className} />;
     };
 
@@ -73,6 +81,13 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
         if (aqi <= 100) return 'text-yellow-600';
         if (aqi <= 150) return 'text-orange-600';
         return 'text-red-600';
+    };
+
+    const getAqiLabel = (aqi: number) => {
+        if (aqi <= 50) return 'Good';
+        if (aqi <= 100) return 'Moderate';
+        if (aqi <= 150) return 'Unhealthy'; // Simplified for mobile space
+        return 'Hazardous';
     };
 
     if (loading) {
@@ -84,7 +99,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                 </div>
             );
         }
-        return <div className="hidden md:block text-[10px] text-gray-400 animate-pulse font-sans">Checking weather...</div>;
+        return <div className="text-[10px] text-gray-400 animate-pulse font-sans">Checking weather...</div>;
     }
 
     if (error || !weather) {
@@ -101,7 +116,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                 
                 <div className="relative z-10">
                     <h4 className="font-sans font-bold text-xs uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
-                        <Thermometer size={16} className="text-gold-dark"/> Local Weather
+                        <Thermometer size={16} className="text-gold-dark"/> {placeName} Weather
                     </h4>
                     
                     <div className="flex items-center justify-between mb-4">
@@ -117,7 +132,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                         {aqi !== null && (
                             <div className="text-right">
                                 <span className={`block text-2xl font-black leading-none ${getAqiColor(aqi)}`}>{aqi}</span>
-                                <span className="text-[10px] font-bold uppercase text-gray-400 mt-1 block">Air Quality</span>
+                                <span className="text-[10px] font-bold uppercase text-gray-400 mt-1 block">{getAqiLabel(aqi)} Air</span>
                             </div>
                         )}
                     </div>
@@ -129,7 +144,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-600">
                             <Droplets size={14} className="text-gray-400" />
-                            <span className="font-bold">{aqi && aqi < 50 ? 'Good' : aqi && aqi < 100 ? 'Moderate' : 'Unhealthy'} <span className="font-normal text-gray-400">Air</span></span>
+                            <span className="font-bold">{getAqiLabel(aqi || 0)}</span>
                         </div>
                     </div>
                 </div>
@@ -137,17 +152,20 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
         );
     }
 
-    // Default Header Layout
+    // Default Header Layout (Now mostly for Mobile View)
     return (
-        <div className="flex flex-col md:flex-row items-end md:items-center gap-1 md:gap-3 bg-white/80 backdrop-blur-sm px-2 py-1 md:px-3 md:py-1.5 rounded border border-gray-200 shadow-sm transition-all hover:shadow-md">
-            <div className="flex items-center gap-1">
-                {getWeatherIcon(weather.code, 14)}
-                <span className="text-xs font-bold text-ink font-sans">{Math.round(weather.temp)}°C</span>
+        <div className="flex flex-row items-center gap-2 bg-white/80 backdrop-blur-sm px-2 py-1 rounded border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-1.5 border-r border-gray-300 pr-2">
+                {getWeatherIcon(weather.code, 16)}
+                <div className="flex flex-col leading-none">
+                    <span className="text-xs font-black text-ink font-sans">{Math.round(weather.temp)}°</span>
+                    <span className="text-[8px] font-bold text-gray-500 uppercase max-w-[60px] truncate">{placeName}</span>
+                </div>
             </div>
             {aqi !== null && (
-                <div className="flex items-center gap-1">
-                    <span className="hidden md:inline text-[10px] text-gray-400 uppercase font-bold border-l border-gray-300 pl-2 ml-1">AQI</span>
-                    <span className={`text-[10px] font-black ${getAqiColor(aqi)}`}>{aqi}</span>
+                <div className="flex flex-col leading-none">
+                    <span className="text-[8px] text-gray-400 uppercase font-bold">AQI {aqi}</span>
+                    <span className={`text-[8px] font-black uppercase ${getAqiColor(aqi)}`}>{getAqiLabel(aqi)}</span>
                 </div>
             )}
         </div>
