@@ -20,27 +20,24 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
     const [error, setError] = useState(false);
 
     useEffect(() => {
-        if (!navigator.geolocation) {
-            setError(true);
-            setLoading(false);
-            return;
-        }
-
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const { latitude, longitude } = position.coords;
+        const fetchWeatherByIP = async () => {
             try {
-                // Fetch Place Name (Reverse Geocoding)
-                // Using BigDataCloud's free client-side API for demo purposes as it doesn't require key/cors for this usage
-                const placeRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
-                const placeData = await placeRes.json();
-                const city = placeData.city || placeData.locality || placeData.principalSubdivision || "Local";
+                // 1. Get Location via IP (No User Permission Needed)
+                const ipRes = await fetch('https://ipapi.co/json/');
+                if (!ipRes.ok) throw new Error('IP Geo failed');
+                const ipData = await ipRes.json();
+                
+                const latitude = ipData.latitude;
+                const longitude = ipData.longitude;
+                const city = ipData.city || ipData.region || "Local";
+                
                 setPlaceName(city);
 
-                // Fetch Weather from Open-Meteo
+                // 2. Fetch Weather from Open-Meteo
                 const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
                 const weatherData = await weatherRes.json();
 
-                // Fetch AQI from Open-Meteo
+                // 3. Fetch AQI from Open-Meteo
                 const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=us_aqi`);
                 const aqiData = await aqiRes.json();
 
@@ -49,18 +46,17 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                     code: weatherData.current_weather.weathercode,
                     windspeed: weatherData.current_weather.windspeed
                 });
-                setAqi(aqiData.current.us_aqi);
+                setAqi(aqiData.current?.us_aqi || null);
                 setLoading(false);
             } catch (e) {
                 console.error("Weather fetch error", e);
+                // Fallback to defaults or error state
                 setError(true);
                 setLoading(false);
             }
-        }, (err) => {
-            console.warn("Geolocation error", err);
-            setError(true); // User denied or error
-            setLoading(false);
-        });
+        };
+
+        fetchWeatherByIP();
     }, []);
 
     const getWeatherIcon = (code: number, size: number = 14) => {
@@ -85,9 +81,9 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
 
     const getAqiLabel = (aqi: number) => {
         if (aqi <= 50) return 'Good';
-        if (aqi <= 100) return 'Moderate';
-        if (aqi <= 150) return 'Unhealthy'; // Simplified for mobile space
-        return 'Hazardous';
+        if (aqi <= 100) return 'Mod'; // Shortened for mobile
+        if (aqi <= 150) return 'Poor'; 
+        return 'Bad';
     };
 
     if (loading) {
@@ -95,19 +91,19 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
             return (
                 <div className="bg-white p-6 shadow-sm border border-gray-100 rounded-lg mb-8 h-40 flex flex-col justify-center items-center gap-2">
                     <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xs text-gray-400">Loading Local Weather...</span>
+                    <span className="text-xs text-gray-400">Locating...</span>
                 </div>
             );
         }
-        return <div className="text-[10px] text-gray-400 animate-pulse font-sans">Checking weather...</div>;
+        return <div className="text-[9px] text-gray-400 animate-pulse font-sans">...</div>;
     }
 
     if (error || !weather) {
-        if (variant === 'sidebar') return null; // Don't show empty box in sidebar if failed
+        if (variant === 'sidebar') return null; 
         return null;
     }
 
-    // Sidebar Layout
+    // Sidebar Layout (Desktop)
     if (variant === 'sidebar') {
         return (
             <div className="bg-white p-6 shadow-sm border border-gray-100 rounded-lg mb-8 relative overflow-hidden group">
@@ -115,8 +111,9 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                 <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 z-0 transition-transform group-hover:scale-110"></div>
                 
                 <div className="relative z-10">
-                    <h4 className="font-sans font-bold text-xs uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
-                        <Thermometer size={16} className="text-gold-dark"/> {placeName} Weather
+                    {/* Updated: Removed "Weather" text, only showing placeName */}
+                    <h4 className="font-sans font-bold text-sm uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
+                        <Thermometer size={18} className="text-gold-dark"/> {placeName}
                     </h4>
                     
                     <div className="flex items-center justify-between mb-4">
@@ -152,20 +149,21 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
         );
     }
 
-    // Default Header Layout (Now mostly for Mobile View)
+    // Default Header Layout (Mobile / Top Bar)
+    // Updated: Much smaller sizing
     return (
-        <div className="flex flex-row items-center gap-2 bg-white/80 backdrop-blur-sm px-2 py-1 rounded border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-1.5 border-r border-gray-300 pr-2">
-                {getWeatherIcon(weather.code, 16)}
+        <div className="flex flex-row items-center gap-1.5 bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded border border-gray-200 shadow-sm">
+            <div className="flex items-center gap-1 border-r border-gray-300 pr-1.5">
+                {getWeatherIcon(weather.code, 12)}
                 <div className="flex flex-col leading-none">
-                    <span className="text-xs font-black text-ink font-sans">{Math.round(weather.temp)}°</span>
-                    <span className="text-[8px] font-bold text-gray-500 uppercase max-w-[60px] truncate">{placeName}</span>
+                    <span className="text-[10px] font-black text-ink font-sans">{Math.round(weather.temp)}°</span>
+                    <span className="text-[8px] font-bold text-gray-500 uppercase max-w-[50px] truncate">{placeName}</span>
                 </div>
             </div>
             {aqi !== null && (
                 <div className="flex flex-col leading-none">
-                    <span className="text-[8px] text-gray-400 uppercase font-bold">AQI {aqi}</span>
-                    <span className={`text-[8px] font-black uppercase ${getAqiColor(aqi)}`}>{getAqiLabel(aqi)}</span>
+                    <span className="text-[7px] text-gray-400 uppercase font-bold">AQI {aqi}</span>
+                    <span className={`text-[7px] font-black uppercase ${getAqiColor(aqi)}`}>{getAqiLabel(aqi)}</span>
                 </div>
             )}
         </div>

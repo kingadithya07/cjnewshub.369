@@ -54,26 +54,28 @@ export const ArticleDetail: React.FC = () => {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between border-t border-b border-gray-200 py-4 mb-8 gap-4">
         <div className="flex flex-wrap items-center gap-6 text-sm text-gray-600 font-sans">
+             {/* Author Section - Enhanced Visibility */}
              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border border-gray-300">
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 border-2 border-gold/50 shadow-sm">
                     {authorUser?.profilePicUrl ? (
                         <img src={authorUser.profilePicUrl} alt={article.author} className="w-full h-full object-cover" />
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <User size={20} />
-                        </div>
+                        <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={24} /></div>
                     )}
                 </div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Written By</span>
-                    <span className="font-bold text-ink leading-none">{article.author}</span>
+                <div className="flex flex-col justify-center">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-0.5">Written By</span>
+                    <span className="font-bold text-ink text-base leading-none">{article.author}</span>
                 </div>
              </div>
+             
              <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+             
              <div className="flex items-center gap-2">
                 <Calendar size={16} className="text-gold" />
                 <span>{article.date}</span>
              </div>
+             
              <div className="flex items-center gap-2">
                 <Eye size={16} className="text-gold" />
                 <span>{article.views || 0} Readers</span> 

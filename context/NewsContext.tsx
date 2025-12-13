@@ -1,8 +1,9 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
-import { Article, EPaperPage, Clipping, User, UserRole, Advertisement, WatermarkSettings, RecoveryRequest, ProfileUpdateRequest, EmailSettings, SubscriptionSettings, AdSettings, AnalyticsData, Comment, ContactMessage, Classified, SecurityRequest } from '../types';
-import { CHIEF_EDITOR_ID, DEFAULT_EMAIL_SETTINGS, DEFAULT_SUBSCRIPTION_SETTINGS, DEFAULT_AD_SETTINGS, INITIAL_ARTICLES, INITIAL_USERS, INITIAL_EPAPER_PAGES, INITIAL_ADS, INITIAL_CLASSIFIEDS } from '../constants';
+import { Article, EPaperPage, Clipping, User, UserRole, Advertisement, WatermarkSettings, RecoveryRequest, ProfileUpdateRequest, EmailSettings, SubscriptionSettings, AdSettings, AnalyticsData, Comment, ContactMessage, Classified, SecurityRequest, AutomationSettings } from '../types';
+import { CHIEF_EDITOR_ID, DEFAULT_EMAIL_SETTINGS, DEFAULT_SUBSCRIPTION_SETTINGS, DEFAULT_AD_SETTINGS, DEFAULT_AUTOMATION_SETTINGS, INITIAL_ARTICLES, INITIAL_USERS, INITIAL_EPAPER_PAGES, INITIAL_ADS, INITIAL_CLASSIFIEDS } from '../constants';
 import { supabase } from '../lib/supabase';
+import { fetchAndProcessNews } from '../lib/autoNewsService';
 
 interface NewsContextType {
   articles: Article[];
@@ -17,6 +18,7 @@ interface NewsContextType {
   emailSettings: EmailSettings;
   subscriptionSettings: SubscriptionSettings;
   adSettings: AdSettings;
+  automationSettings: AutomationSettings; // New
   comments: Comment[];
   contactMessages: ContactMessage[];
   classifieds: Classified[];
@@ -25,7 +27,6 @@ interface NewsContextType {
   securityRequests: SecurityRequest[];
   
   login: (email: string, password: string, role?: UserRole) => Promise<User | null>;
-  // New: Request Access for new device
   requestAccess: (email: string, password: string, type: 'login' | 'recovery') => Promise<{ success: boolean; message: string; requestId?: string }>;
   checkRequestStatus: (requestId: string) => Promise<SecurityRequest['status']>;
   respondToSecurityRequest: (requestId: string, action: 'approve' | 'reject') => Promise<void>;
@@ -44,6 +45,8 @@ interface NewsContextType {
   updateEmailSettings: (settings: EmailSettings) => Promise<void>;
   updateSubscriptionSettings: (settings: SubscriptionSettings) => Promise<void>;
   updateAdSettings: (settings: AdSettings) => Promise<void>;
+  updateAutomationSettings: (settings: AutomationSettings) => Promise<void>; // New
+  triggerAutoPublish: () => Promise<number>; // New
 
   getAnalytics: () => AnalyticsData;
 
@@ -71,17 +74,14 @@ interface NewsContextType {
   approveContent: (type: 'article' | 'ad' | 'epaper', id: string) => Promise<void>;
   rejectContent: (type: 'article' | 'ad' | 'epaper', id: string) => Promise<void>;
 
-  // Comment Functions
   addComment: (articleId: string, content: string) => Promise<void>;
   voteComment: (commentId: string, type: 'like' | 'dislike') => Promise<void>;
   deleteComment: (commentId: string) => Promise<void>;
 
-  // Contact Functions
   sendContactMessage: (name: string, email: string, subject: string, message: string) => Promise<void>;
   markMessageAsRead: (id: string) => Promise<void>;
   deleteMessage: (id: string) => Promise<void>;
 
-  // Classifieds Functions
   addClassified: (classified: Classified) => Promise<void>;
   deleteClassified: (id: string) => Promise<void>;
 }
@@ -124,16 +124,17 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [adSettings, setAdSettings] = useState<AdSettings>(() => {
       try {
           const saved = localStorage.getItem('cj_ad_settings');
-          if (saved) {
-              const parsed = JSON.parse(saved);
-              if (parsed && typeof parsed === 'object' && typeof parsed.enableAdsGlobally === 'boolean') {
-                  return parsed;
-              }
-          }
-      } catch (e) {
-          console.warn("Failed to load ad settings, using default:", e);
-      }
+          if (saved) return JSON.parse(saved);
+      } catch (e) {}
       return DEFAULT_AD_SETTINGS;
+  });
+
+  const [automationSettings, setAutomationSettings] = useState<AutomationSettings>(() => {
+      try {
+          const saved = localStorage.getItem('cj_auto_settings');
+          if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return DEFAULT_AUTOMATION_SETTINGS;
   });
 
   const [recoveryRequests, setRecoveryRequests] = useState<RecoveryRequest[]>([]);
@@ -148,13 +149,32 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return true;
   }, [adSettings, currentUser]);
 
+  // --- AUTOMATION EFFECT ---
+  // Check on mount if auto-publish is enabled and due
+  useEffect(() => {
+    const checkAutomation = async () => {
+        if (!automationSettings.enableAutoPublish) return;
+        
+        const now = Date.now();
+        const intervalMs = automationSettings.autoPublishInterval * 60 * 60 * 1000;
+        
+        if (now - automationSettings.lastRun > intervalMs) {
+            console.log("Auto-Publishing Triggered...");
+            try {
+                const count = await triggerAutoPublish();
+                console.log(`Auto-Published ${count} articles.`);
+            } catch (e) {
+                console.error("Auto-Publish failed", e);
+            }
+        }
+    };
+    checkAutomation();
+  }, [automationSettings]);
+
   // --- INITIAL DATA LOAD & SEEDING ---
   const fetchData = async () => {
       if(!supabase) return;
-      
-      // Load Security Requests (simulated table)
       try {
-          // For demo, we store requests in localStorage to persist across refreshes
           const savedReqs = localStorage.getItem('cj_security_requests');
           if (savedReqs) setSecurityRequests(JSON.parse(savedReqs));
       } catch (e) {}
@@ -182,7 +202,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
-    // 1. Setup Visitor IP
     let ip = localStorage.getItem('cj_visitor_ip');
     if (!ip) {
        ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
@@ -190,7 +209,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     setVisitorIp(ip);
 
-    // 2. Setup Device ID (Persistent Unique ID for this browser)
     let dId = localStorage.getItem('cj_device_id');
     if (!dId) {
         dId = `DEV-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -200,14 +218,12 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     fetchData();
 
-    // Persist session locally
     const savedUser = localStorage.getItem('cj_current_user');
     if(savedUser) {
         setCurrentUser(JSON.parse(savedUser));
     }
   }, []);
 
-  // Sync user to local storage for persistence
   useEffect(() => {
     try {
         if (currentUser) {
@@ -215,32 +231,30 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } else {
             localStorage.removeItem('cj_current_user');
         }
-    } catch (e) {
-        console.error("Local storage error:", e);
-    }
+    } catch (e) {}
   }, [currentUser]);
 
-  // Sync security requests to local storage (simulating DB)
   useEffect(() => {
       localStorage.setItem('cj_security_requests', JSON.stringify(securityRequests));
   }, [securityRequests]);
 
-  // --- SECURITY FUNCTIONS ---
-
+  // --- HELPER FUNCTIONS ---
   const requestAccess = async (email: string, password: string, type: 'login' | 'recovery'): Promise<{ success: boolean; message: string; requestId?: string }> => {
-      // Find user
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      
-      // Basic credential check for login flow (security practice: don't reveal if user exists, but for demo we do)
       if (!user) return { success: false, message: "User not found." };
       if (type === 'login' && user.password !== password) return { success: false, message: "Invalid credentials." };
 
-      // Check if device is already trusted
       if (user.trustedDevices && user.trustedDevices.includes(currentDeviceId)) {
-          return { success: true, message: "Device Verified." }; // Allow immediate access
+          return { success: true, message: "Device Verified." };
       }
 
-      // If not trusted, create a request
+      if (!user.trustedDevices || user.trustedDevices.length === 0) {
+          const updatedTrusted = [currentDeviceId];
+          const updatedUser = { ...user, trustedDevices: updatedTrusted };
+          setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
+          return { success: true, message: "First device verified." };
+      }
+
       const existingReq = securityRequests.find(r => r.userId === user.id && r.deviceId === currentDeviceId && r.status === 'pending');
       if (existingReq) {
           return { success: false, message: "Approval Pending", requestId: existingReq.id };
@@ -274,15 +288,12 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
           return req;
       }));
-
-      // If approved, add device to user's trusted list
       if (action === 'approve') {
           const req = securityRequests.find(r => r.id === requestId);
           if (req) {
               setUsers(prevUsers => prevUsers.map(u => {
                   if (u.id === req.userId) {
                       const updatedTrusted = [...(u.trustedDevices || []), req.deviceId];
-                      // Also update currentUser if it's the same user (though this function runs on the Approver's device)
                       if (currentUser && currentUser.id === u.id) {
                           const updatedCurrentUser = { ...currentUser, trustedDevices: updatedTrusted };
                           setCurrentUser(updatedCurrentUser);
@@ -291,31 +302,26 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                   }
                   return u;
               }));
-              // In real app, sync to DB here
           }
       }
   };
 
   const login = async (email: string, password: string, role?: UserRole): Promise<User | null> => {
-    // Note: The UI calls requestAccess first. This function assumes device is verified or user forces login (if logic permits).
-    const user = users.find(u => u.email === email && u.password === password);
+    let user = users.find(u => u.email === email && u.password === password);
     if (user) {
         if (role && user.role !== role && user.role !== 'admin') return null;
         if (user.status === 'blocked' || user.status === 'pending') return null;
-        
-        // Auto-add trusted device if not present (legacy support or first login simulation)
-        if (!user.trustedDevices?.includes(currentDeviceId)) {
-             // Ideally we shouldn't do this without the approval flow, but for the very first user/admin setup we might need it.
-             // For strict mode: DO NOT auto-add.
+        if (!user.trustedDevices || user.trustedDevices.length === 0) {
+             const updatedUser = { ...user, trustedDevices: [currentDeviceId] };
+             setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
+             user = updatedUser;
         }
-        
         setCurrentUser(user);
         return user;
     }
     return null;
   };
 
-  // ... (Register/CreateAdmin remain mostly same, just add trustedDevices: []) ...
   const register = async (name: string, email: string, password: string, role: UserRole = 'publisher'): Promise<{ success: boolean; message?: string }> => {
     if(!supabase) return { success: false, message: "Database error" };
     const { data: existing } = await supabase.from('users').select('*').eq('email', email).single();
@@ -328,7 +334,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
       subscriptionPlan: role === 'subscriber' ? 'free' : undefined,
       profilePicUrl: `https://i.pravatar.cc/150?u=${Date.now()}`,
-      trustedDevices: [currentDeviceId] // Trust the device used for registration
+      trustedDevices: [currentDeviceId] 
     };
     const { error: dbError } = await supabase.from('users').insert([newUser]);
     setUsers(prev => [...prev, newUser]);
@@ -358,10 +364,10 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ip: visitorIp,
           joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
           profilePicUrl: `https://i.pravatar.cc/150?u=admin`,
-          trustedDevices: [currentDeviceId] // Trust setup device
+          trustedDevices: [currentDeviceId] 
       };
       setUsers(prev => [...prev, masterAdmin]);
-      setCurrentUser(masterAdmin); // Auto login master admin
+      setCurrentUser(masterAdmin); 
       return true;
   };
 
@@ -371,19 +377,14 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const initiateRecovery = async (email: string): Promise<{ success: boolean, message: string, code?: string }> => {
-      // Step 1: Check if user exists
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!user) return { success: false, message: "Email not found." };
-
-      // Step 2: Check Device Trust
       if (!user.trustedDevices || !user.trustedDevices.includes(currentDeviceId)) {
-          // Trigger Security Request
           const result = await requestAccess(email, '', 'recovery'); 
-          // Note: Password empty because we don't know it, requestAccess handles type 'recovery' properly
-          return { success: false, message: "Unrecognized Device. Approval request sent to your active devices.", code: undefined };
+          if (!result.success) {
+              return { success: false, message: "Unrecognized Device. Approval request sent to your active devices.", code: undefined };
+          }
       }
-
-      // Step 3: Generate Code (Only if Trusted)
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const newRequest: RecoveryRequest = {
           email: user.email,
@@ -407,7 +408,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { success: true, message: "Password updated successfully." };
   };
 
-  // ... (Keep existing simple implementations for profile update, settings, etc.) ...
   const resetPassword = async (password: string) => true;
   const initiateProfileUpdate = async (newEmail?: string, newPassword?: string, newProfilePic?: string) => {
       if (!currentUser) return null;
@@ -433,17 +433,38 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateEmailSettings = async (settings: EmailSettings) => setEmailSettings(settings);
   const updateSubscriptionSettings = async (settings: SubscriptionSettings) => setSubscriptionSettings(settings);
   const updateAdSettings = async (settings: AdSettings) => setAdSettings(settings);
+  const updateAutomationSettings = async (settings: AutomationSettings) => {
+      setAutomationSettings(settings);
+      localStorage.setItem('cj_auto_settings', JSON.stringify(settings));
+  };
   const updateWatermarkSettings = async (settings: WatermarkSettings) => setWatermarkSettings(settings);
   
+  const triggerAutoPublish = async (): Promise<number> => {
+      // Use Process Env key (Assuming it's injected via Vite)
+      const apiKey = process.env.API_KEY || '';
+      if (!apiKey) throw new Error("API Key missing");
+
+      const newArticles = await fetchAndProcessNews(apiKey, 'All');
+      if (newArticles.length > 0) {
+          setArticles(prev => [...newArticles, ...prev]);
+          // Update Last Run
+          const newSettings = { ...automationSettings, lastRun: Date.now() };
+          setAutomationSettings(newSettings);
+          localStorage.setItem('cj_auto_settings', JSON.stringify(newSettings));
+      }
+      return newArticles.length;
+  };
+
   const getAnalytics = (): AnalyticsData => {
       return { totalViews: 1250, avgViewsPerArticle: 45, categoryDistribution: [], dailyVisits: [], geoSources: [] };
   };
 
-  // ... (Other standard CRUD functions) ...
   const addArticle = async (article: Article) => setArticles(prev => [article, ...prev]);
   const updateArticle = async (updatedArticle: Article) => setArticles(prev => prev.map(a => a.id === updatedArticle.id ? updatedArticle : a));
   const deleteArticle = async (id: string) => setArticles(prev => prev.filter(a => a.id !== id));
-  const incrementArticleView = async (id: string) => {};
+  const incrementArticleView = async (id: string) => {
+      setArticles(prev => prev.map(a => a.id === id ? { ...a, views: (a.views || 0) + 1 } : a));
+  };
   const addCategory = async (category: string) => setCategories(prev => [...prev, category]);
   const deleteCategory = async (category: string) => setCategories(prev => prev.filter(c => c !== category));
   const addEPaperPage = async (page: EPaperPage) => setEPaperPages(prev => [...prev, page]);
@@ -452,19 +473,82 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addClipping = async (clipping: Clipping) => setClippings(prev => [clipping, ...prev]);
   const deleteClipping = async (id: string) => setClippings(prev => prev.filter(c => c.id !== id));
   const deleteUser = async (id: string) => setUsers(prev => prev.filter(u => u.id !== id));
-  const toggleUserStatus = async (id: string) => {};
+  const toggleUserStatus = async (id: string) => {
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'active' ? 'blocked' : 'active' } : u));
+  };
   const toggleUserSubscription = async (id: string) => {};
   const toggleUserAdStatus = async (id: string) => {};
   const addAdvertisement = async (ad: Advertisement) => setAdvertisements(prev => [...prev, ad]);
   const updateAdvertisement = async (ad: Advertisement) => setAdvertisements(prev => prev.map(a => a.id === ad.id ? ad : a));
   const deleteAdvertisement = async (id: string) => setAdvertisements(prev => prev.filter(a => a.id !== id));
-  const toggleAdStatus = async (id: string) => {};
-  const trackAdClick = async (id: string) => {};
-  const approveContent = async (type: string, id: string) => {};
-  const rejectContent = async (type: string, id: string) => {};
-  const addComment = async (articleId: string, content: string) => {};
-  const voteComment = async () => {};
-  const deleteComment = async () => {};
+  const toggleAdStatus = async (id: string) => {
+      setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: a.status === 'active' ? 'inactive' : 'active' } : a));
+  };
+  const trackAdClick = async (id: string) => {
+      setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, clicks: a.clicks + 1 } : a));
+  };
+  const approveContent = async (type: string, id: string) => {
+      if (type === 'article') {
+          setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'published' } : a));
+      } else if (type === 'ad') {
+          setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'active' } : a));
+      }
+  };
+  const rejectContent = async (type: string, id: string) => {
+      if (type === 'article') {
+           setArticles(prev => prev.filter(a => a.id !== id));
+      } else if (type === 'ad') {
+          setAdvertisements(prev => prev.filter(a => a.id !== id));
+      }
+  };
+  const addComment = async (articleId: string, content: string) => {
+      if (!currentUser) return;
+      const newComment: Comment = {
+          id: Date.now().toString(),
+          articleId,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userAvatar: currentUser.profilePicUrl,
+          content,
+          timestamp: Date.now(),
+          likes: 0,
+          dislikes: 0,
+          likedBy: [],
+          dislikedBy: []
+      };
+      setComments(prev => [newComment, ...prev]);
+  };
+  const voteComment = async (commentId: string, type: 'like' | 'dislike') => {
+      if (!currentUser) return;
+      setComments(prev => prev.map(c => {
+          if (c.id === commentId) {
+              const hasLiked = c.likedBy.includes(currentUser.id);
+              const hasDisliked = c.dislikedBy.includes(currentUser.id);
+              
+              if (type === 'like') {
+                  if (hasLiked) return c; // Already liked
+                  return { 
+                      ...c, 
+                      likes: c.likes + 1, 
+                      likedBy: [...c.likedBy, currentUser.id],
+                      dislikes: hasDisliked ? c.dislikes - 1 : c.dislikes,
+                      dislikedBy: hasDisliked ? c.dislikedBy.filter(id => id !== currentUser.id) : c.dislikedBy
+                  };
+              } else {
+                   if (hasDisliked) return c; // Already disliked
+                   return {
+                       ...c,
+                       dislikes: c.dislikes + 1,
+                       dislikedBy: [...c.dislikedBy, currentUser.id],
+                       likes: hasLiked ? c.likes - 1 : c.likes,
+                       likedBy: hasLiked ? c.likedBy.filter(id => id !== currentUser.id) : c.likedBy
+                   };
+              }
+          }
+          return c;
+      }));
+  };
+  const deleteComment = async (commentId: string) => setComments(prev => prev.filter(c => c.id !== commentId));
   const sendContactMessage = async (name: string, email: string, subject: string, message: string) => {
       const msg: ContactMessage = { id: Date.now().toString(), name, email, subject, message, timestamp: Date.now(), read: false };
       setContactMessages(prev => [msg, ...prev]);
@@ -477,11 +561,11 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <NewsContext.Provider value={{
       articles, categories, ePaperPages, clippings, currentUser, users, advertisements,
-      watermarkSettings, recoveryRequests, emailSettings, subscriptionSettings, adSettings,
+      watermarkSettings, recoveryRequests, emailSettings, subscriptionSettings, adSettings, automationSettings,
       comments, contactMessages, classifieds, showAds, currentDeviceId, securityRequests,
       login, register, createAdmin, setupMasterAdmin, logout, resetPassword, initiateRecovery, completeRecovery,
       initiateProfileUpdate, completeProfileUpdate, updateEmailSettings, updateSubscriptionSettings,
-      updateAdSettings, getAnalytics, addArticle, updateArticle, deleteArticle, incrementArticleView,
+      updateAdSettings, updateAutomationSettings, triggerAutoPublish, getAnalytics, addArticle, updateArticle, deleteArticle, incrementArticleView,
       addCategory, deleteCategory, addEPaperPage, deleteEPaperPage, deleteAllEPaperPages, addClipping,
       deleteClipping, deleteUser, toggleUserStatus, toggleUserSubscription, toggleUserAdStatus,
       addAdvertisement, updateAdvertisement, deleteAdvertisement, toggleAdStatus, trackAdClick,
