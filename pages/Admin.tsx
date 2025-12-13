@@ -564,7 +564,8 @@ export const Admin: React.FC = () => {
     { id: 'ads', label: 'Ads', icon: Megaphone, allowed: isAdmin },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, allowed: isAdmin },
     { id: 'admins', label: 'Admins', icon: ShieldAlert, allowed: isChiefEditor },
-    { id: 'approvals', label: 'Approvals', icon: CheckCircle, allowed: isChiefEditor, badge: totalPending },
+    // UPDATE: Allow all admins to see Approvals tab, not just Chief Editor
+    { id: 'approvals', label: 'Approvals', icon: CheckCircle, allowed: isAdmin, badge: totalPending },
     { id: 'inbox', label: 'Inbox', icon: Inbox, allowed: isChiefEditor, badge: unreadMessagesCount },
     { id: 'settings', label: 'Settings', icon: Settings, allowed: true },
   ];
@@ -1390,8 +1391,8 @@ export const Admin: React.FC = () => {
                       </div>
                   )}
 
-                  {/* --- APPROVALS TAB --- */}
-                  {activeTab === 'approvals' && isChiefEditor && (
+                  {/* --- APPROVALS TAB (Visible to ALL Admins) --- */}
+                  {activeTab === 'approvals' && isAdmin && (
                       <div className="space-y-8 animate-in fade-in duration-500">
                           {/* (Approvals content same as original) */}
                           <div className="bg-white p-4 md:p-6 shadow-sm border border-gray-200 rounded-sm">
@@ -1434,8 +1435,8 @@ export const Admin: React.FC = () => {
                                                    <p className="text-xs text-gray-600">{user.email}</p>
                                                </div>
                                                <div className="flex gap-2">
-                                                   <button onClick={() => toggleUserStatus(user.id)} className="text-green-600 hover:bg-green-100 p-2 rounded"><CheckCircle size={20}/></button>
-                                                   <button onClick={() => deleteUser(user.id)} className="text-red-600 hover:bg-red-100 p-2 rounded"><X size={20}/></button>
+                                                   <button onClick={() => toggleUserStatus(user.id)} className="text-green-600 hover:bg-green-100 p-2 rounded" title="Approve"><CheckCircle size={20}/></button>
+                                                   <button onClick={() => deleteUser(user.id)} className="text-red-600 hover:bg-red-100 p-2 rounded" title="Reject"><X size={20}/></button>
                                                </div>
                                            </div>
                                        ))}

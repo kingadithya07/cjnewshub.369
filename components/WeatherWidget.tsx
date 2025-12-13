@@ -22,30 +22,57 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
     // Search State
     const [showSearch, setShowSearch] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [manualLocation, setManualLocation] = useState<{lat: number, lon: number, name: string} | null>(null);
+    
+    // Initialize manualLocation from LocalStorage to persist selection
+    const [manualLocation, setManualLocation] = useState<{lat: number, lon: number, name: string} | null>(() => {
+        try {
+            const saved = localStorage.getItem('cj_weather_location');
+            return saved ? JSON.parse(saved) : null;
+        } catch (e) {
+            return null;
+        }
+    });
+
+    // Save to LocalStorage whenever manualLocation changes
+    useEffect(() => {
+        if (manualLocation) {
+            localStorage.setItem('cj_weather_location', JSON.stringify(manualLocation));
+        }
+    }, [manualLocation]);
 
     const fetchWeatherData = async (lat: number, lon: number, name: string) => {
         try {
             setLoading(true);
-            // Fetch Weather
+            
+            // 1. Fetch Weather
             const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+            if (!weatherRes.ok) throw new Error('Weather Service Unavailable');
             const weatherData = await weatherRes.json();
 
-            // Fetch AQI
-            const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
-            const aqiData = await aqiRes.json();
+            // 2. Fetch AQI (Separate try-catch to prevent blocking weather if AQI fails)
+            let aqiValue = null;
+            try {
+                const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
+                if (aqiRes.ok) {
+                    const aqiData = await aqiRes.json();
+                    aqiValue = aqiData.current?.us_aqi || null;
+                }
+            } catch (aqiErr) {
+                console.warn("AQI data unavailable:", aqiErr);
+            }
 
             setWeather({
                 temp: weatherData.current_weather.temperature,
                 code: weatherData.current_weather.weathercode,
                 windspeed: weatherData.current_weather.windspeed
             });
-            setAqi(aqiData.current?.us_aqi || null);
+            setAqi(aqiValue);
             setPlaceName(name);
             setLoading(false);
             setError(false);
         } catch (e) {
             console.error("Weather data fetch error", e);
+            // Don't set error true immediately if we have stale data, but here we likely don't.
             setError(true);
             setLoading(false);
         }
@@ -53,26 +80,28 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
 
     useEffect(() => {
         const initWeather = async () => {
+            // If user manually selected a location, use that.
             if (manualLocation) {
                 await fetchWeatherData(manualLocation.lat, manualLocation.lon, manualLocation.name);
                 return;
             }
 
+            // Otherwise, try to auto-detect
             try {
-                // 1. Get Location via IP
-                const ipRes = await fetch('https://ipapi.co/json/');
+                // Use geojs.io (more reliable free https endpoint than ipapi.co)
+                const ipRes = await fetch('https://get.geojs.io/v1/ip/geo.json');
                 if (!ipRes.ok) throw new Error('IP Geo failed');
                 const ipData = await ipRes.json();
                 
-                const latitude = ipData.latitude;
-                const longitude = ipData.longitude;
+                const latitude = parseFloat(ipData.latitude);
+                const longitude = parseFloat(ipData.longitude);
                 const city = ipData.city || ipData.region || "Local";
                 
                 await fetchWeatherData(latitude, longitude, city);
             } catch (e) {
-                console.error("Initial location fetch error", e);
-                setError(true);
-                setLoading(false);
+                console.warn("Auto-location failed, falling back to default (New York).", e);
+                // Fallback to New York to ensure widget always renders something
+                await fetchWeatherData(40.7128, -74.0060, "New York");
             }
         };
 
@@ -85,20 +114,23 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
 
         try {
             setLoading(true);
+            // Open-Meteo Geocoding API covers millions of locations globally
             const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchQuery)}&count=1&language=en&format=json`);
+            if (!geoRes.ok) throw new Error('Search API error');
             const geoData = await geoRes.json();
 
             if (geoData.results && geoData.results.length > 0) {
                 const loc = geoData.results[0];
-                setManualLocation({
+                const newLoc = {
                     lat: loc.latitude,
                     lon: loc.longitude,
                     name: loc.name
-                });
+                };
+                setManualLocation(newLoc); // This triggers useEffect to save and fetch
                 setShowSearch(false);
                 setSearchQuery('');
             } else {
-                alert("Location not found.");
+                alert("Location not found. Please try a different spelling.");
                 setLoading(false);
             }
         } catch (e) {
@@ -109,7 +141,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
     };
 
     const getWeatherIcon = (code: number, size: number = 14) => {
-        const className = variant === 'sidebar' ? "text-gold-dark" : "text-gold-dark";
+        const className = "text-gold-dark";
         if (code <= 1) return <Sun size={size} className="text-orange-500" />;
         if (code <= 3) return <Cloud size={size} className="text-gray-400" />;
         if (code <= 48) return <Wind size={size} className="text-gray-400" />;
@@ -130,9 +162,9 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
 
     const getAqiLabel = (aqi: number) => {
         if (aqi <= 50) return 'Good';
-        if (aqi <= 100) return 'Mod'; 
-        if (aqi <= 150) return 'Poor'; 
-        return 'Bad';
+        if (aqi <= 100) return 'Moderate'; 
+        if (aqi <= 150) return 'Unhealthy'; 
+        return 'Hazardous';
     };
 
     if (loading && !weather) {
@@ -144,12 +176,21 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                 </div>
             );
         }
-        return <div className="text-[9px] text-gray-400 animate-pulse font-sans w-24 h-6 bg-gray-100 rounded"></div>;
+        // Header loading skeleton
+        return (
+            <div className="bg-white/50 backdrop-blur-sm px-4 py-2 rounded border border-gray-200 shadow-sm flex items-center gap-3">
+                <div className="w-6 h-6 bg-gray-200 rounded-full animate-pulse"></div>
+                <div className="flex flex-col gap-1">
+                    <div className="w-12 h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <div className="w-16 h-3 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+            </div>
+        );
     }
 
     if (error || !weather) {
         if (variant === 'sidebar') return null; 
-        return null;
+        return null; // Hide widget on error for header to avoid ugly error text
     }
 
     // --- SIDEBAR LAYOUT ---
@@ -179,7 +220,7 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
                                 <input 
                                     type="text" 
                                     autoFocus
-                                    placeholder="Enter city name..."
+                                    placeholder="City name..."
                                     className="w-full text-sm border-b border-gold outline-none py-1 bg-transparent"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -224,39 +265,42 @@ export const WeatherWidget: React.FC<WeatherWidgetProps> = ({ variant = 'header'
         );
     }
 
-    // --- HEADER LAYOUT (Compact) ---
+    // --- HEADER LAYOUT (Bigger & Right Aligned) ---
+    // Increased padding, icon sizes, and font sizes as requested
     return (
-        <div className="flex flex-row items-center gap-1.5 bg-white/90 backdrop-blur-sm px-2 py-1 rounded border border-gray-200 shadow-sm transition-all hover:border-gold/50">
+        <div className="flex flex-row items-center gap-3 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-md border border-gray-300 shadow-md hover:shadow-lg transition-all min-w-[180px]">
             {showSearch ? (
-                <form onSubmit={handleSearchSubmit} className="flex items-center gap-1">
+                <form onSubmit={handleSearchSubmit} className="flex items-center gap-1 w-full">
                     <input 
                         type="text" 
                         autoFocus
                         placeholder="City..."
-                        className="w-16 text-[10px] border-b border-gray-300 outline-none bg-transparent font-bold text-ink"
+                        className="w-full text-sm border-b border-gray-300 outline-none bg-transparent font-bold text-ink placeholder-gray-400"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onBlur={() => !searchQuery && setShowSearch(false)}
                     />
-                    <button type="submit" className="text-green-600 hover:text-green-800"><MapPin size={10} /></button>
-                    <button type="button" onClick={() => setShowSearch(false)} className="text-red-500"><X size={10} /></button>
+                    <button type="submit" className="text-green-600 hover:text-green-800 p-1"><MapPin size={16} /></button>
+                    <button type="button" onClick={() => setShowSearch(false)} className="text-red-500 p-1"><X size={16} /></button>
                 </form>
             ) : (
                 <>
-                    <div className="flex items-center gap-1 border-r border-gray-300 pr-1.5">
-                        {getWeatherIcon(weather.code, 12)}
+                    <div className="flex items-center gap-3 border-r border-gray-300 pr-3">
+                        {/* Larger Icon */}
+                        {getWeatherIcon(weather.code, 28)}
                         <div className="flex flex-col leading-none">
-                            <span className="text-[10px] font-black text-ink font-sans">{Math.round(weather.temp)}°</span>
-                            <div className="flex items-center gap-0.5 group cursor-pointer" onClick={() => setShowSearch(true)} title="Change Location">
-                                <span className="text-[8px] font-bold text-gray-500 uppercase max-w-[50px] truncate">{placeName}</span>
-                                <Plus size={6} className="text-gold-dark group-hover:scale-125 transition-transform" />
+                            {/* Larger Font */}
+                            <span className="text-xl font-black text-ink font-sans tracking-tight">{Math.round(weather.temp)}°C</span>
+                            <div className="flex items-center gap-1 group cursor-pointer" onClick={() => setShowSearch(true)} title="Change Location">
+                                <span className="text-xs font-bold text-gray-500 uppercase max-w-[100px] truncate">{placeName}</span>
+                                <Plus size={10} className="text-gold-dark group-hover:scale-125 transition-transform" />
                             </div>
                         </div>
                     </div>
                     {aqi !== null && (
-                        <div className="flex flex-col leading-none">
-                            <span className="text-[7px] text-gray-400 uppercase font-bold">AQI {aqi}</span>
-                            <span className={`text-[7px] font-black uppercase ${getAqiColor(aqi)}`}>{getAqiLabel(aqi)}</span>
+                        <div className="flex flex-col leading-none min-w-[40px] items-center">
+                            <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">AQI {aqi}</span>
+                            <span className={`text-[10px] font-black uppercase ${getAqiColor(aqi)}`}>{getAqiLabel(aqi)}</span>
                         </div>
                     )}
                 </>

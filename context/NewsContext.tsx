@@ -487,11 +487,14 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { totalViews: 1250, avgViewsPerArticle: 45, categoryDistribution: [], dailyVisits: [], geoSources: [] };
   };
 
-  // ... (Other standard CRUD functions) ...
+  // --- CRUD FUNCTIONS IMPLEMENTATION ---
+  
   const addArticle = async (article: Article) => setArticles(prev => [article, ...prev]);
   const updateArticle = async (updatedArticle: Article) => setArticles(prev => prev.map(a => a.id === updatedArticle.id ? updatedArticle : a));
   const deleteArticle = async (id: string) => setArticles(prev => prev.filter(a => a.id !== id));
-  const incrementArticleView = async (id: string) => {};
+  const incrementArticleView = async (id: string) => {
+      setArticles(prev => prev.map(a => a.id === id ? { ...a, views: (a.views || 0) + 1 } : a));
+  };
   const addCategory = async (category: string) => setCategories(prev => [...prev, category]);
   const deleteCategory = async (category: string) => setCategories(prev => prev.filter(c => c !== category));
   const addEPaperPage = async (page: EPaperPage) => setEPaperPages(prev => [...prev, page]);
@@ -500,19 +503,127 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addClipping = async (clipping: Clipping) => setClippings(prev => [clipping, ...prev]);
   const deleteClipping = async (id: string) => setClippings(prev => prev.filter(c => c.id !== id));
   const deleteUser = async (id: string) => setUsers(prev => prev.filter(u => u.id !== id));
-  const toggleUserStatus = async (id: string) => {};
-  const toggleUserSubscription = async (id: string) => {};
-  const toggleUserAdStatus = async (id: string) => {};
+  
+  const toggleUserStatus = async (id: string) => {
+      setUsers(prev => prev.map(u => {
+          if (u.id !== id) return u;
+          let nextStatus: User['status'] = 'active';
+          if (u.status === 'active') nextStatus = 'blocked';
+          else if (u.status === 'blocked') nextStatus = 'active';
+          else if (u.status === 'pending') nextStatus = 'active';
+          
+          if (supabase) { 
+              supabase.from('users').update({ status: nextStatus }).eq('id', id).then();
+          }
+          return { ...u, status: nextStatus };
+      }));
+  };
+
+  const toggleUserSubscription = async (id: string) => {
+      setUsers(prev => prev.map(u => {
+          if(u.id !== id) return u;
+          const newPlan = u.subscriptionPlan === 'premium' ? 'free' : 'premium';
+          return { ...u, subscriptionPlan: newPlan };
+      }));
+  };
+  
+  const toggleUserAdStatus = async (id: string) => {
+      setUsers(prev => prev.map(u => {
+          if(u.id !== id) return u;
+          return { ...u, isAdFree: !u.isAdFree };
+      }));
+  };
+
   const addAdvertisement = async (ad: Advertisement) => setAdvertisements(prev => [...prev, ad]);
   const updateAdvertisement = async (ad: Advertisement) => setAdvertisements(prev => prev.map(a => a.id === ad.id ? ad : a));
   const deleteAdvertisement = async (id: string) => setAdvertisements(prev => prev.filter(a => a.id !== id));
-  const toggleAdStatus = async (id: string) => {};
-  const trackAdClick = async (id: string) => {};
-  const approveContent = async (type: string, id: string) => {};
-  const rejectContent = async (type: string, id: string) => {};
-  const addComment = async (articleId: string, content: string) => {};
-  const voteComment = async () => {};
-  const deleteComment = async () => {};
+  const toggleAdStatus = async (id: string) => {
+      setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: a.status === 'active' ? 'inactive' : 'active' } : a));
+  };
+  const trackAdClick = async (id: string) => {
+      setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, clicks: a.clicks + 1 } : a));
+  };
+
+  const approveContent = async (type: 'article' | 'ad' | 'epaper', id: string) => {
+      if (type === 'article') {
+          setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'published' } : a));
+      } else if (type === 'ad') {
+          setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'active' } : a));
+      } else if (type === 'epaper') {
+          setEPaperPages(prev => prev.map(p => p.id === id ? { ...p, status: 'active' } : p));
+      }
+  };
+
+  const rejectContent = async (type: 'article' | 'ad' | 'epaper', id: string) => {
+       if (type === 'article') {
+          setArticles(prev => prev.map(a => a.id === id ? { ...a, status: 'draft' } : a));
+      } else if (type === 'ad') {
+          setAdvertisements(prev => prev.map(a => a.id === id ? { ...a, status: 'inactive' } : a));
+      } else if (type === 'epaper') {
+          setEPaperPages(prev => prev.map(p => p.id === id ? { ...p, status: 'pending' } : p));
+      }
+  };
+
+  const addComment = async (articleId: string, content: string) => {
+      if (!currentUser) return;
+      const newComment: Comment = {
+          id: Date.now().toString(),
+          articleId,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          userAvatar: currentUser.profilePicUrl,
+          content,
+          timestamp: Date.now(),
+          likes: 0,
+          dislikes: 0,
+          likedBy: [],
+          dislikedBy: []
+      };
+      setComments(prev => [newComment, ...prev]);
+  };
+
+  const voteComment = async (commentId: string, type: 'like' | 'dislike') => {
+      if (!currentUser) return;
+      setComments(prev => prev.map(c => {
+          if (c.id !== commentId) return c;
+          const hasLiked = c.likedBy.includes(currentUser.id);
+          const hasDisliked = c.dislikedBy.includes(currentUser.id);
+          
+          let newLikes = c.likes;
+          let newDislikes = c.dislikes;
+          let newLikedBy = [...c.likedBy];
+          let newDislikedBy = [...c.dislikedBy];
+
+          if (type === 'like') {
+              if (hasLiked) {
+                  newLikes--;
+                  newLikedBy = newLikedBy.filter(id => id !== currentUser.id);
+              } else {
+                  newLikes++;
+                  newLikedBy.push(currentUser.id);
+                  if (hasDisliked) {
+                      newDislikes--;
+                      newDislikedBy = newDislikedBy.filter(id => id !== currentUser.id);
+                  }
+              }
+          } else {
+              if (hasDisliked) {
+                  newDislikes--;
+                  newDislikedBy = newDislikedBy.filter(id => id !== currentUser.id);
+              } else {
+                  newDislikes++;
+                  newDislikedBy.push(currentUser.id);
+                  if (hasLiked) {
+                      newLikes--;
+                      newLikedBy = newLikedBy.filter(id => id !== currentUser.id);
+                  }
+              }
+          }
+          return { ...c, likes: newLikes, dislikes: newDislikes, likedBy: newLikedBy, dislikedBy: newDislikedBy };
+      }));
+  };
+
+  const deleteComment = async (commentId: string) => setComments(prev => prev.filter(c => c.id !== commentId));
   const sendContactMessage = async (name: string, email: string, subject: string, message: string) => {
       const msg: ContactMessage = { id: Date.now().toString(), name, email, subject, message, timestamp: Date.now(), read: false };
       setContactMessages(prev => [msg, ...prev]);

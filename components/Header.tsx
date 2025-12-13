@@ -129,13 +129,8 @@ export const Header: React.FC = () => {
 
       {/* Main Branding - Compact Version */}
       <div className="w-full py-2 md:py-4 flex flex-col items-start md:items-center justify-center relative px-4 md:px-2">
-        {/* Left Side: Weather (if away from home) OR Search */}
+        {/* Left Side: Search */}
         <div className="absolute left-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-4">
-             {!isHome && (
-                 <div className="animate-in fade-in slide-in-from-left-2 duration-500">
-                     <WeatherWidget variant="header" />
-                 </div>
-             )}
              <div className="relative w-48">
                 <input 
                     type="text" 
@@ -146,9 +141,14 @@ export const Header: React.FC = () => {
              </div>
         </div>
 
-        {/* Right Side Tools: Weather (Mobile only) + Subscribe */}
+        {/* Right Side Tools: Weather (Mobile & !Home) + Subscribe */}
         <div className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
-            <div className="md:hidden">
+            
+            {/* Show Weather Widget on Mobile OR when NOT on Home page (Desktop) */}
+            <div className={`
+                ${!isHome ? 'flex' : 'md:hidden'}
+                animate-in fade-in slide-in-from-right-2 duration-500
+            `}>
                 <WeatherWidget variant="header" />
             </div>
             
