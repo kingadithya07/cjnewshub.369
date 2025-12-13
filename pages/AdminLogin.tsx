@@ -15,22 +15,18 @@ export const AdminLogin: React.FC = () => {
     e.preventDefault();
     setError('');
     
-    try {
-        const user = await login(email, password);
-        
-        if (user) {
-            if (user.role === 'admin') {
-                navigate('/admin');
-            } else {
-                // Log them out immediately if they are not admin
-                logout();
-                setError('Access Denied: You do not have administrator privileges.');
-            }
+    const user = await login(email, password);
+    
+    if (user) {
+        if (user.role === 'admin') {
+            navigate('/admin');
         } else {
-          setError('Invalid admin credentials.');
+            // Log them out immediately if they are not admin
+            logout();
+            setError('Access Denied: You do not have administrator privileges.');
         }
-    } catch (err: any) {
-        setError(err.message || 'Login failed.');
+    } else {
+      setError('Invalid admin credentials.');
     }
   };
 

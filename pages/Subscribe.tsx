@@ -48,8 +48,8 @@ export const Subscribe: React.FC = () => {
                     setError("Invalid credentials.");
                 }
             }
-        } catch (err: any) {
-            setError(err.message || "An error occurred. Please try again.");
+        } catch (err) {
+            setError("An error occurred. Please try again.");
         } finally {
             setLoading(false);
         }

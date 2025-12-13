@@ -17,25 +17,13 @@ export const Home: React.FC = () => {
   // Filter for published articles only
   const publishedArticles = articles.filter(a => a.status === 'published');
   
-  // --- LOGIC UPDATE: Intelligent Content Distribution ---
-  // 1. Slider: Prioritize 'isFeatured'. If none, take the absolute latest one.
-  let sliderArticles = publishedArticles.filter(a => a.isFeatured).slice(0, 5);
-  if (sliderArticles.length === 0 && publishedArticles.length > 0) {
-      sliderArticles = [publishedArticles[0]];
-  }
-
-  // 2. Latest News: Everything else that isn't in the slider.
-  // We sort by date descending just in case, though usually 'articles' is already sorted.
-  const remainingArticles = publishedArticles.filter(a => !sliderArticles.find(s => s.id === a.id));
+  // Top 5 Articles for Slider
+  const sliderArticles = publishedArticles.slice(0, 5);
   
-  // Desktop "Latest News" Grid (Take up to 6)
-  const latestNewsArticles = remainingArticles.slice(0, 6);
+  // Next 3 Articles for Latest News
+  const latestNewsArticles = publishedArticles.slice(5, 8);
   
-  // Mobile "Latest" List (Take up to 10)
-  const mobileLatestArticles = remainingArticles.slice(0, 10);
-  
-  // Trending Articles (Sorted by views, exclude slider if possible to show variety, or just top views)
-  // Showing top views regardless of placement is standard for "Trending".
+  // Trending Articles (Sorted by views)
   const trendingArticles = [...publishedArticles].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5);
 
   const handleArticleClick = (id: string) => {
@@ -137,7 +125,6 @@ export const Home: React.FC = () => {
                                             {article.title}
                                         </h2>
                                         
-                                        {/* Author Info - Now visible on mobile too */}
                                         <div className="flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-500 delay-300">
                                             <div className="w-8 h-8 rounded-full overflow-hidden border border-white/30 bg-gray-800">
                                                 {author?.profilePicUrl ? (
@@ -146,7 +133,7 @@ export const Home: React.FC = () => {
                                                     <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={16}/></div>
                                                 )}
                                             </div>
-                                            <p className="text-gray-200 font-serif text-sm font-bold line-clamp-1 max-w-2xl">
+                                            <p className="hidden md:block text-gray-200 font-serif text-sm line-clamp-1 max-w-2xl">
                                                 By {article.author}
                                             </p>
                                         </div>
@@ -185,7 +172,7 @@ export const Home: React.FC = () => {
                     </div>
                 ) : (
                     <div className="w-full h-64 flex items-center justify-center bg-gray-200 rounded-lg text-gray-500">
-                        <p>No published articles available.</p>
+                        <p>No featured articles available at the moment.</p>
                     </div>
                 )}
 
@@ -205,33 +192,18 @@ export const Home: React.FC = () => {
                             <Zap size={14} fill="currentColor"/> Latest
                          </h3>
                          <div className="space-y-6">
-                            {mobileLatestArticles.length === 0 && <p className="text-[10px] text-gray-400 italic">No new stories.</p>}
-                            {mobileLatestArticles.map(a => {
-                                const author = getAuthor(a.authorId, a.author);
-                                return (
-                                    <div key={a.id} onClick={() => handleArticleClick(a.id)} className="cursor-pointer group">
-                                        <div className="aspect-[4/3] bg-gray-100 mb-2 rounded overflow-hidden shadow-sm relative">
-                                            <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
-                                                <span className="text-[8px] font-bold text-white uppercase tracking-wider">{a.category}</span>
-                                            </div>
-                                        </div>
-                                        {/* Title */}
-                                        <h4 className="font-serif font-bold text-xs leading-normal line-clamp-3 text-ink group-hover:text-gold-dark transition-colors mb-1">{a.title}</h4>
-                                        {/* Author & Date - Mobile */}
-                                        <div className="flex items-center gap-1.5">
-                                            <div className="w-4 h-4 rounded-full overflow-hidden bg-gray-200 border border-gray-100 shrink-0">
-                                                {author?.profilePicUrl ? (
-                                                    <img src={author.profilePicUrl} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={8}/></div>
-                                                )}
-                                            </div>
-                                            <span className="text-[9px] font-bold text-gray-500 truncate">{a.author}</span>
+                            {publishedArticles.slice(5, 9).map(a => (
+                                <div key={a.id} onClick={() => handleArticleClick(a.id)} className="cursor-pointer group">
+                                    <div className="aspect-[4/3] bg-gray-100 mb-2 rounded overflow-hidden shadow-sm relative">
+                                        <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
+                                            <span className="text-[8px] font-bold text-white uppercase tracking-wider">{a.category}</span>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                    {/* Adjusted leading for Telugu */}
+                                    <h4 className="font-serif font-bold text-xs leading-normal line-clamp-3 text-ink group-hover:text-gold-dark transition-colors">{a.title}</h4>
+                                </div>
+                            ))}
                          </div>
                     </div>
 
@@ -299,14 +271,14 @@ export const Home: React.FC = () => {
                                             </h3>
                                             
                                             <div className="flex items-center gap-2 mt-1">
-                                                <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-200 border border-gray-100 shrink-0">
+                                                <div className="w-5 h-5 rounded-full overflow-hidden bg-gray-200 border border-gray-100">
                                                     {author?.profilePicUrl ? (
                                                         <img src={author.profilePicUrl} alt={article.author} className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={12}/></div>
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={10}/></div>
                                                     )}
                                                 </div>
-                                                <span className="text-xs font-bold text-gray-600 uppercase">{article.author}</span>
+                                                <span className="text-[10px] font-bold text-gray-500 uppercase">{article.author}</span>
                                             </div>
 
                                             <p className="text-sm text-gray-500 font-sans line-clamp-3 leading-relaxed mt-1">
@@ -319,7 +291,7 @@ export const Home: React.FC = () => {
                         </div>
                     ) : (
                         <div className="text-center py-10 text-gray-400 italic bg-gray-50 rounded border border-dashed border-gray-200">
-                            Check back soon for more stories.
+                            Stay tuned for more updates.
                         </div>
                     )}
                 </div>

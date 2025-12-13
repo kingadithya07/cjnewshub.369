@@ -11,9 +11,6 @@ export const Header: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Route Check
-  const isHome = location.pathname === '/';
-
   // Time and Date State
   const [dateTimeInfo, setDateTimeInfo] = useState({
       date: '',
@@ -129,9 +126,8 @@ export const Header: React.FC = () => {
 
       {/* Main Branding - Compact Version */}
       <div className="w-full py-2 md:py-4 flex flex-col items-start md:items-center justify-center relative px-4 md:px-2">
-        {/* Left Side: Search */}
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-4">
-             <div className="relative w-48">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 hidden md:block w-64">
+             <div className="relative">
                 <input 
                     type="text" 
                     placeholder="Search Archives..." 
@@ -141,15 +137,10 @@ export const Header: React.FC = () => {
              </div>
         </div>
 
-        {/* Right Side Tools: Weather (Mobile & !Home) + Subscribe */}
+        {/* Right Side Tools: Weather + Subscribe */}
         <div className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
-            
-            {/* Show Weather Widget on Mobile OR when NOT on Home page (Desktop) */}
-            <div className={`
-                ${!isHome ? 'flex' : 'md:hidden'}
-                animate-in fade-in slide-in-from-right-2 duration-500
-            `}>
-                <WeatherWidget variant="header" />
+            <div className="md:hidden">
+                <WeatherWidget />
             </div>
             
             {!currentUser && (
@@ -274,7 +265,7 @@ export const Header: React.FC = () => {
              </div>
         )}
 
-        {/* Mobile Nav Dropdown */}
+        {/* Mobile Nav Dropdown - Adjusted to show categories mostly */}
         {isMenuOpen && (
             <div className="md:hidden border-t border-gray-100 bg-paper px-4 py-4 space-y-4 animate-in slide-in-from-top-2">
                 <p className="text-[10px] font-bold uppercase text-gray-400 tracking-widest border-b border-gray-200 pb-1 mb-2">Sections</p>
