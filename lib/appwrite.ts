@@ -6,7 +6,7 @@ const client = new Client();
 
 // Initialize Appwrite
 client
-    .setEndpoint('https://cloud.appwrite.io/v1') // Replace if using self-hosted
+    .setEndpoint(APPWRITE_CONFIG.ENDPOINT) 
     .setProject(APPWRITE_CONFIG.PROJECT_ID);
 
 export const account = new Account(client);
