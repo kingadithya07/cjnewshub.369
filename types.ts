@@ -59,13 +59,6 @@ export interface AdSettings {
     enableAdsGlobally: boolean;
 }
 
-export interface AutomationSettings {
-    enableAutoPublish: boolean;
-    autoPublishInterval: number; // in hours
-    targetLanguage: 'te' | 'en';
-    lastRun: number;
-}
-
 export interface Advertisement {
   id: string;
   advertiserName: string;

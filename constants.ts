@@ -1,5 +1,5 @@
 
-import { Article, EPaperPage, User, Advertisement, AdSize, EmailSettings, SubscriptionSettings, AdSettings, Classified, AutomationSettings } from './types';
+import { Article, EPaperPage, User, Advertisement, AdSize, EmailSettings, SubscriptionSettings, AdSettings, Classified } from './types';
 
 export const CATEGORIES = ['World', 'Business', 'Technology', 'Culture', 'Sports', 'Opinion'];
 
@@ -23,13 +23,6 @@ export const DEFAULT_SUBSCRIPTION_SETTINGS: SubscriptionSettings = {
 
 export const DEFAULT_AD_SETTINGS: AdSettings = {
     enableAdsGlobally: true
-};
-
-export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = {
-    enableAutoPublish: false,
-    autoPublishInterval: 12, // Hours
-    targetLanguage: 'te',
-    lastRun: 0
 };
 
 export const INITIAL_CLASSIFIEDS: Classified[] = [
