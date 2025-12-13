@@ -11,8 +11,8 @@ export const MASTER_RECOVERY_KEY = 'CHIEF-SECURE-2025';
 // --- APPWRITE CONFIGURATION ---
 export const APPWRITE_CONFIG = {
     PROJECT_ID: '693d22c000236a18097f', 
-    ENDPOINT: 'https://fra.cloud.appwrite.io/v1',
-    DATABASE_ID: 'cj_news_db', // Assumed 'cj_news_db' based on setup instructions. Change if your DB ID differs.
+    ENDPOINT: 'https://cloud.appwrite.io/v1', // Updated to standard Cloud endpoint
+    DATABASE_ID: 'cj_news_db', 
     COLLECTION_IDS: {
         ARTICLES: 'articles',
         USERS: 'users',
@@ -24,7 +24,7 @@ export const APPWRITE_CONFIG = {
         MESSAGES: 'messages',
         SETTINGS: 'settings'
     },
-    bucketId: 'images' // Replace with your Storage Bucket ID if using image uploads
+    BUCKET: 'images'
 };
 
 export const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
