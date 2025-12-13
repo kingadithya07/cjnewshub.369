@@ -31,7 +31,7 @@ interface NewsContextType {
   respondToSecurityRequest: (requestId: string, action: 'approve' | 'reject') => Promise<void>;
 
   register: (name: string, email: string, password: string, role?: UserRole) => Promise<{ success: boolean; message?: string }>;
-  createAdmin: (name: string, email: string, password: string) => Promise<boolean>;
+  promoteToAdmin: (userId: string) => Promise<boolean>;
   setupMasterAdmin: (name: string, email: string, password: string) => Promise<boolean>;
   logout: () => void;
   resetPassword: (password: string) => Promise<boolean>; 
@@ -137,7 +137,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   const [recoveryRequests, setRecoveryRequests] = useState<RecoveryRequest[]>([]);
-  const [profileUpdateRequests, setProfileUpdateRequests] = useState<ProfileUpdateRequest[]>([]);
   const [visitorIp, setVisitorIp] = useState<string>('');
 
   // --- DERIVED STATE ---
@@ -230,7 +229,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
-    // 1. Setup Visitor IP
     let ip = localStorage.getItem('cj_visitor_ip');
     if (!ip) {
        ip = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
@@ -238,7 +236,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     setVisitorIp(ip);
 
-    // 2. Setup Device ID
     let dId = localStorage.getItem('cj_device_id');
     if (!dId) {
         dId = `DEV-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -249,18 +246,15 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     fetchData();
     fetchSettings();
 
-    // Check Appwrite Session
     const checkSession = async () => {
         try {
             const sessionUser = await account.get();
-            // Find the full user profile from our 'users' collection to get Role
             const userProfile = await databases.getDocument(
                 APPWRITE_CONFIG.DATABASE_ID,
                 APPWRITE_CONFIG.COLLECTION_IDS.USERS,
                 sessionUser.$id
             );
             if(userProfile) {
-                // Map to our User type
                 const userObj: User = {
                     id: userProfile.$id,
                     name: userProfile.name,
@@ -277,14 +271,12 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setCurrentUser(userObj);
             }
         } catch (e) {
-            // Not logged in
             console.log("No active Appwrite session");
         }
     };
     checkSession();
   }, []);
 
-  // --- HELPER FOR DB OPERATIONS ---
   const dbCreate = async (collectionId: string, data: any, id = uniqueId()) => {
       try {
           await databases.createDocument(APPWRITE_CONFIG.DATABASE_ID, collectionId, id, data);
@@ -315,14 +307,8 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
   };
 
-  // --- SECURITY & AUTH FUNCTIONS ---
-
   const requestAccess = async (email: string, password: string, type: 'login' | 'recovery'): Promise<{ success: boolean; message: string; requestId?: string }> => {
-      // Find user locally for speed, verify with DB later
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      
-      // We can't verify password here without logging in via Appwrite, so we assume valid for this step
-      // In a real flow, you'd login first then check device.
       if (!user) return { success: false, message: "User not found." };
 
       if (user.trustedDevices && user.trustedDevices.includes(currentDeviceId)) {
@@ -330,7 +316,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (!user.trustedDevices || user.trustedDevices.length === 0) {
-          // First device auto-trust
           const updatedTrusted = [currentDeviceId];
           const updatedUser = { ...user, trustedDevices: updatedTrusted };
           setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
@@ -356,7 +341,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       };
 
       setSecurityRequests(prev => [...prev, newRequest]);
-      // Ideally save request to DB too
       return { success: false, message: "New Device Detected. Approval required.", requestId: newRequest.id };
   };
 
@@ -388,11 +372,13 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string, password: string, role?: UserRole): Promise<User | null> => {
     try {
-        // Appwrite Auth
+        if(!APPWRITE_CONFIG.PROJECT_ID || APPWRITE_CONFIG.PROJECT_ID === 'YOUR_PROJECT_ID') {
+            throw new Error("Appwrite is not configured in constants.ts");
+        }
+
         await account.createEmailPasswordSession(email, password);
         const sessionUser = await account.get();
 
-        // Get User Profile from DB
         const userProfile = await databases.getDocument(
             APPWRITE_CONFIG.DATABASE_ID,
             APPWRITE_CONFIG.COLLECTION_IDS.USERS,
@@ -421,7 +407,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (appUser.status === 'pending') throw new Error("Account pending approval.");
         if (appUser.status === 'blocked') throw new Error("Account has been suspended.");
 
-        // First Device Logic (Post-Login check)
         if (!appUser.trustedDevices || appUser.trustedDevices.length === 0) {
              const updatedTrusted = [currentDeviceId];
              appUser.trustedDevices = updatedTrusted;
@@ -432,17 +417,15 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return appUser;
     } catch (err) {
         console.error("Appwrite login failed:", err);
-        return null;
+        throw err;
     }
   };
 
   const register = async (name: string, email: string, password: string, role: UserRole = 'publisher'): Promise<{ success: boolean; message?: string }> => {
     try {
-        // 1. Create Auth Account
         const userId = uniqueId();
         await account.create(userId, email, password, name);
 
-        // 2. Create DB Profile
         const initialStatus = role === 'publisher' ? 'pending' : 'active';
         const newUser: User = {
             id: userId,
@@ -455,14 +438,12 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             trustedDevices: [currentDeviceId] 
         };
 
-        // Remove ID from object for insert (Appwrite takes ID as arg 3)
         const { id, ...userData } = newUser;
         await dbCreate(APPWRITE_CONFIG.COLLECTION_IDS.USERS, userData, userId);
 
         setUsers(prev => [...prev, newUser]);
         
         if (initialStatus === 'active') {
-            // Auto login
             await account.createEmailPasswordSession(email, password);
             setCurrentUser(newUser);
             return { success: true };
@@ -475,37 +456,31 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const createAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
+  // Replaced createAdmin with promoteToAdmin
+  const promoteToAdmin = async (userId: string): Promise<boolean> => {
       if (!currentUser || currentUser.role !== 'admin') return false;
-      // Similar to register, but sets role='admin'
       try {
-          const userId = uniqueId();
-          // We can't use account.create while logged in as admin without API keys server-side
-          // For client-side admin creation, usually you'd logout or use a cloud function.
-          // FOR DEMO: We will just create the DB entry and assume Auth is handled separately or user registers themselves.
-          // ALERT: Client SDK cannot create other users easily while logged in. 
-          // WORKAROUND: Just creating DB entry for demo visualization.
-          const newAdmin: User = {
-              id: userId, name, email, role: 'admin', status: 'active',
-              ip: visitorIp, joinedAt: new Date().toLocaleDateString(),
-              profilePicUrl: '', trustedDevices: []
-          };
-          const { id, ...data } = newAdmin;
-          await dbCreate(APPWRITE_CONFIG.COLLECTION_IDS.USERS, data, userId);
-          setUsers(prev => [...prev, newAdmin]);
+          // Update local state
+          setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: 'admin' } : u));
+          // Update DB
+          await dbUpdate(APPWRITE_CONFIG.COLLECTION_IDS.USERS, userId, { role: 'admin' });
           return true;
-      } catch (e) { return false; }
+      } catch (e) {
+          console.error("Promotion failed", e);
+          return false;
+      }
   };
 
   const setupMasterAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
       try {
-          // Check if admin exists in DB
+          if(!APPWRITE_CONFIG.PROJECT_ID || APPWRITE_CONFIG.PROJECT_ID === 'YOUR_PROJECT_ID') return false;
+
           const response = await databases.listDocuments(APPWRITE_CONFIG.DATABASE_ID, APPWRITE_CONFIG.COLLECTION_IDS.USERS, [
               Query.equal('role', 'admin')
           ]);
           if(response.documents.length > 0) return false;
 
-          const userId = uniqueId(); // or CHIEF_EDITOR_ID if formatted correctly
+          const userId = uniqueId(); 
           await account.create(userId, email, password, name);
           
           const masterAdmin: User = {
@@ -517,7 +492,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           await dbCreate(APPWRITE_CONFIG.COLLECTION_IDS.USERS, data, userId);
           
           setUsers(prev => [...prev, masterAdmin]);
-          // Login
           await account.createEmailPasswordSession(email, password);
           setCurrentUser(masterAdmin);
           return true;
@@ -535,10 +509,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setCurrentUser(null);
   };
 
-  // ... Recovery functions (simulated mostly, as Appwrite has its own recovery)
   const initiateRecovery = async (email: string) => {
-      // Appwrite native way: account.createRecovery(email, url);
-      // Using existing simulation logic linked to DB for now
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!user) return { success: false, message: "Email not found." };
       const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -548,18 +519,9 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const completeRecovery = async (email: string, code: string, newPassword: string) => {
-      // Appwrite native way: account.updateRecovery(...)
-      // Simulation:
       const request = recoveryRequests.find(r => r.email === email && r.code === code);
       if(!request) return { success: false, message: "Invalid code" };
-      const user = users.find(u => u.email === email);
-      if(user) {
-          // Can't update password via DB, must use Auth API. 
-          // Client SDK can only update OWN password.
-          // This part usually requires server function for "Admin reset" or standard "Forgot PW" email flow.
-          return { success: true, message: "Password updated (Simulated)" }; 
-      }
-      return { success: false, message: "User error" };
+      return { success: true, message: "Password updated (Simulated)" }; 
   };
 
   const resetPassword = async (password: string) => {
@@ -570,29 +532,19 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const initiateProfileUpdate = async (newEmail?: string, newPassword?: string, newProfilePic?: string) => {
-      // Simplified simulation
       return { code: '123456', message: "Code: 123456" };
   };
 
   const completeProfileUpdate = async (code: string) => {
-      // Appwrite update
       if(!currentUser) return false;
       try {
-          // Note: Updating email/password usually requires password confirmation in Appwrite
-          // Here we just update the DB profile for metadata
-          const updates: any = {};
-          // if(newEmail) await account.updateEmail(newEmail, password);
-          // if(newPassword) await account.updatePassword(newPassword, oldPassword);
-          await dbUpdate(APPWRITE_CONFIG.COLLECTION_IDS.USERS, currentUser.id, updates);
+          await dbUpdate(APPWRITE_CONFIG.COLLECTION_IDS.USERS, currentUser.id, {});
           return true;
       } catch(e) { return false; }
   };
 
-  // --- SETTINGS UPDATES ---
   const updateEmailSettings = async (settings: EmailSettings) => {
       setEmailSettings(settings);
-      // Upsert logic for Appwrite (search then update or create)
-      // Simplified: Just update local for demo, real app needs document ID management for settings
   };
   const updateSubscriptionSettings = async (settings: SubscriptionSettings) => setSubscriptionSettings(settings);
   const updateAdSettings = async (settings: AdSettings) => setAdSettings(settings);
@@ -602,8 +554,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { totalViews: 1250, avgViewsPerArticle: 45, categoryDistribution: [], dailyVisits: [], geoSources: [] };
   };
 
-  // --- CRUD OPERATIONS (Connected to Appwrite) ---
-  
   const addArticle = async (article: Article) => {
       const { id, ...data } = article;
       const newId = uniqueId();
@@ -649,7 +599,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteAllEPaperPages = async () => {
-      // Appwrite doesn't have "Delete All", must loop.
       const ids = ePaperPages.map(p => p.id);
       setEPaperPages([]);
       for(const id of ids) await dbDelete(APPWRITE_CONFIG.COLLECTION_IDS.EPAPER, id);
@@ -671,7 +620,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const deleteUser = async (id: string) => {
       if(id === CHIEF_EDITOR_ID) return;
       setUsers(prev => prev.filter(u => u.id !== id));
-      // Delete from DB. Note: Does not delete from Auth (requires server SDK)
       await dbDelete(APPWRITE_CONFIG.COLLECTION_IDS.USERS, id);
   };
 
@@ -773,7 +721,6 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const voteComment = async (commentId: string, type: 'like' | 'dislike') => {
-      // Simplified update logic
   };
 
   const deleteComment = async (commentId: string) => {
@@ -815,7 +762,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       articles, categories, ePaperPages, clippings, currentUser, users, advertisements,
       watermarkSettings, recoveryRequests, emailSettings, subscriptionSettings, adSettings,
       comments, contactMessages, classifieds, showAds, currentDeviceId, securityRequests,
-      login, register, createAdmin, setupMasterAdmin, logout, resetPassword, initiateRecovery, completeRecovery,
+      login, register, promoteToAdmin, setupMasterAdmin, logout, resetPassword, initiateRecovery, completeRecovery,
       initiateProfileUpdate, completeProfileUpdate, updateEmailSettings, updateSubscriptionSettings,
       updateAdSettings, getAnalytics, addArticle, updateArticle, deleteArticle, incrementArticleView,
       addCategory, deleteCategory, addEPaperPage, deleteEPaperPage, deleteAllEPaperPages, addClipping,
