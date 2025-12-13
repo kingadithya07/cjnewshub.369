@@ -1,6 +1,4 @@
 
-
-
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useNews } from '../context/NewsContext';
@@ -46,10 +44,11 @@ export const ArticleDetail: React.FC = () => {
       </button>
 
       <div className="mb-4">
-        <span className="text-gold-dark font-bold uppercase tracking-widest text-xs">{article.category}</span>
+        <span className="text-gold-dark font-bold uppercase tracking-widest text-xs bg-gold/10 px-2 py-1 rounded">{article.category}</span>
       </div>
 
-      <h1 className="text-4xl md:text-5xl font-serif font-bold text-ink mb-6 leading-tight">
+      {/* Increased font size and line-height for Telugu script readability */}
+      <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-ink mb-6 leading-normal md:leading-normal">
         {article.title}
       </h1>
 
@@ -85,6 +84,7 @@ export const ArticleDetail: React.FC = () => {
         </button>
       </div>
 
+      {/* MEDIA SECTION: Changed to allow full height (no crop) */}
       {article.videoUrl ? (
         <div className="mb-8 w-full aspect-video bg-black rounded overflow-hidden shadow-lg">
              <video 
@@ -95,21 +95,24 @@ export const ArticleDetail: React.FC = () => {
              />
         </div>
       ) : (
-        <div className="mb-8 w-full aspect-[2/1] bg-gray-100 rounded overflow-hidden shadow-lg relative">
+        <div className="mb-10 w-full bg-gray-50 rounded-lg overflow-hidden shadow-md">
+            {/* Removed aspect ratio and object-cover to prevent cropping. 
+                Using w-full h-auto to show full image. */}
             <img 
                 src={article.imageUrl} 
                 alt={article.title} 
-                className="w-full h-full object-cover"
+                className="w-full h-auto object-contain max-h-[85vh] mx-auto"
             />
         </div>
       )}
 
-      <div className="font-serif text-gray-800 leading-relaxed">
-         <p className="text-xl font-bold mb-8 text-ink border-l-4 border-gold pl-4 italic">
+      {/* ARTICLE CONTENT: Increased text size and line height */}
+      <div className="font-serif text-gray-900">
+         <p className="text-xl md:text-2xl font-bold mb-8 text-ink border-l-4 border-gold pl-6 italic leading-relaxed">
             {article.excerpt}
          </p>
          <div 
-            className="prose prose-lg max-w-none font-serif text-gray-800 leading-relaxed [&>p]:mb-4"
+            className="prose prose-xl max-w-none font-serif text-gray-800 leading-loose [&>p]:mb-6"
             dangerouslySetInnerHTML={{ __html: article.content }} 
         />
       </div>

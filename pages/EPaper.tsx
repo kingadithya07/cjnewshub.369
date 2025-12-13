@@ -189,7 +189,7 @@ export const EPaper: React.FC = () => {
   const handleCrop = async () => {
     const cropper = cropperInstance.current;
     if (cropper) {
-        // Optimized settings for speed: removed imageSmoothingQuality: 'high'
+        // Optimized settings for speed
         const canvas = cropper.getCroppedCanvas({
             fillColor: '#FFFFFF', // Ensure no transparency
         });
@@ -227,27 +227,30 @@ export const EPaper: React.FC = () => {
                 // 2. Draw Top Header Strip (if enabled)
                 if (topStripHeight > 0) {
                     if (headerImage) {
-                         const headerImg = new Image();
-                         headerImg.src = headerImage;
-                         await new Promise((resolve) => {
-                             headerImg.onload = resolve;
-                             headerImg.onerror = resolve; 
-                         });
+                         const headerImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+                             const img = new Image();
+                             img.crossOrigin = "Anonymous";
+                             img.onload = () => resolve(img);
+                             img.onerror = () => reject(new Error("Header load failed"));
+                             img.src = headerImage;
+                         }).catch(() => null);
 
-                         // Draw image centered in the top strip, maintaining aspect ratio
-                         const hRatio = totalWidth / headerImg.naturalWidth;
-                         const vRatio = topStripHeight / headerImg.naturalHeight;
-                         // Use a slightly smaller ratio to leave some padding
-                         const ratio = Math.min(hRatio, vRatio) * 0.9; 
-                         
-                         const drawWidth = headerImg.naturalWidth * ratio;
-                         const drawHeight = headerImg.naturalHeight * ratio;
-                         
-                         // Center vertically and horizontally in the top strip
-                         const centerX = (totalWidth - drawWidth) / 2;
-                         const centerY = (topStripHeight - drawHeight) / 2;
+                         if (headerImg) {
+                             // Draw image centered in the top strip, maintaining aspect ratio
+                             const hRatio = totalWidth / headerImg.naturalWidth;
+                             const vRatio = topStripHeight / headerImg.naturalHeight;
+                             // Use a slightly smaller ratio to leave some padding
+                             const ratio = Math.min(hRatio, vRatio) * 0.9; 
+                             
+                             const drawWidth = headerImg.naturalWidth * ratio;
+                             const drawHeight = headerImg.naturalHeight * ratio;
+                             
+                             // Center vertically and horizontally in the top strip
+                             const centerX = (totalWidth - drawWidth) / 2;
+                             const centerY = (topStripHeight - drawHeight) / 2;
 
-                         ctx.drawImage(headerImg, centerX, centerY, drawWidth, drawHeight);
+                             ctx.drawImage(headerImg, centerX, centerY, drawWidth, drawHeight);
+                         }
                     } else if (headerText) {
                          // Draw Text
                          ctx.fillStyle = '#1A1A1A'; 
@@ -277,12 +280,13 @@ export const EPaper: React.FC = () => {
 
                 // 4a. Draw Logo (if exists)
                 if (watermarkSettings.logoUrl) {
-                    const logoImg = new Image();
-                    logoImg.src = watermarkSettings.logoUrl;
                     try {
-                        await new Promise((resolve, reject) => {
-                            logoImg.onload = resolve;
-                            logoImg.onerror = resolve; // Continue even if error
+                        const logoImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+                            const img = new Image();
+                            img.crossOrigin = "Anonymous";
+                            img.onload = () => resolve(img);
+                            img.onerror = () => reject(new Error("Logo load failed"));
+                            img.src = watermarkSettings.logoUrl!;
                         });
                         
                         const logoH = bottomStripHeight * 0.6; // 60% of strip height
@@ -293,7 +297,7 @@ export const EPaper: React.FC = () => {
                         ctx.drawImage(logoImg, textStartX, logoY, logoW, logoH);
                         textStartX += logoW + padding;
                     } catch (e) {
-                        console.warn("Logo load failed", e);
+                        console.warn("Watermark logo failed to load:", e);
                     }
                 }
 

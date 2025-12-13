@@ -77,6 +77,21 @@ export const INITIAL_CLASSIFIEDS: Classified[] = [
 export const INITIAL_ARTICLES: Article[] = [
   // --- SLIDER ARTICLES (First 5) ---
   {
+    id: 'telugu-1',
+    title: "విశాఖపట్నంలో కొత్త ఐటీ హబ్ ఏర్పాటుకు సన్నాహాలు",
+    excerpt: "నగర అభివృద్ధిలో భాగంగా ఐటీ రంగాన్ని విస్తరించేందుకు ప్రభుత్వం కీలక నిర్ణయం తీసుకుంది. త్వరలో శంకుస్థాపన.",
+    category: "Technology",
+    author: "విలేఖరి",
+    authorId: 'admin1',
+    date: "24-11-2025",
+    imageUrl: "https://picsum.photos/800/400?random=10",
+    content: "<p>విశాఖపట్నం నగరాన్ని ఐటీ రాజధానిగా తీర్చిదిద్దేందుకు ప్రభుత్వం వడివడిగా అడుగులు వేస్తోంది. మధురవాడ ఐటీ సెజ్‌లో అంతర్జాతీయ స్థాయి ప్రమాణాలతో కూడిన నూతన ఐటీ టవర్‌కు వచ్చే నెలలో శంకుస్థాపన జరగనుంది.</p><p>ఈ ప్రాజెక్టు ద్వారా సుమారు 15,000 మందికి ప్రత్యక్షంగానూ, 40,000 మందికి పరోక్షంగానూ ఉపాధి లభిస్తుందని అంచనా వేస్తున్నారు. పలు బహుళజాతి సంస్థలు ఇప్పటికే ఇక్కడ కార్యాలయాలు ఏర్పాటు చేసేందుకు ఆసక్తి కనబరిచాయి.</p>",
+    tags: ["Vizag", "IT Hub", "Development"],
+    status: 'published',
+    isFeatured: true,
+    views: 120
+  },
+  {
     id: '1',
     title: "Global Markets Rally as Tech Sector Rebounds Unexpectedly",
     excerpt: "Investors are celebrating a surprising turn of events in the silicon valley sector as major players announce breakthrough earnings for Q3.",
@@ -136,6 +151,8 @@ export const INITIAL_ARTICLES: Article[] = [
     isFeatured: true,
     views: 0
   },
+  
+  // --- LATEST NEWS ARTICLES (Next 3) ---
   {
     id: '5',
     title: "Championship Finals: The Underdog Story of the Decade",
@@ -151,8 +168,6 @@ export const INITIAL_ARTICLES: Article[] = [
     isFeatured: false,
     views: 0
   },
-
-  // --- LATEST NEWS ARTICLES (Next 3) ---
   {
     id: '6',
     title: "Urban Farming: The Future of City Living?",
@@ -179,21 +194,6 @@ export const INITIAL_ARTICLES: Article[] = [
     imageUrl: "https://picsum.photos/800/400?random=7",
     content: "Full article content...",
     tags: ["EV", "Automotive", "Green Energy"],
-    status: 'published',
-    isFeatured: false,
-    views: 0
-  },
-  {
-    id: '8',
-    title: "Mystery of the Deep: New Species Discovered",
-    excerpt: "Marine biologists exploring the Mariana Trench have cataloged a bioluminescent organism never before seen by human eyes.",
-    category: "Technology",
-    author: "Jacques Cousteau",
-    authorId: 'admin1',
-    date: "21-11-2025",
-    imageUrl: "https://picsum.photos/800/400?random=8",
-    content: "Full article content...",
-    tags: ["Science", "Ocean", "Discovery"],
     status: 'published',
     isFeatured: false,
     views: 0

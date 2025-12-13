@@ -189,7 +189,11 @@ export const Header: React.FC = () => {
                 </Link>
 
                 {currentUser ? (
-                    <Link to="/admin" className={`flex flex-col items-center gap-0.5 px-2 ${isActive('/admin') ? 'text-ink font-bold' : 'hover:text-ink'}`}>
+                    <Link 
+                        to="/admin" 
+                        state={{ tab: 'settings' }}
+                        className={`flex flex-col items-center gap-0.5 px-2 ${isActive('/admin') ? 'text-ink font-bold' : 'hover:text-ink'}`}
+                    >
                         <UserIcon size={18} strokeWidth={isActive('/admin') ? 2.5 : 2} />
                         <span className="text-[8px] uppercase tracking-widest">Profile</span>
                     </Link>

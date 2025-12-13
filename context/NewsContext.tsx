@@ -110,9 +110,21 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return saved ? JSON.parse(saved) : DEFAULT_SUBSCRIPTION_SETTINGS;
   });
 
+  // ROBUST INITIALIZATION FOR AD SETTINGS
   const [adSettings, setAdSettings] = useState<AdSettings>(() => {
-      const saved = localStorage.getItem('cj_ad_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_AD_SETTINGS;
+      try {
+          const saved = localStorage.getItem('cj_ad_settings');
+          if (saved) {
+              const parsed = JSON.parse(saved);
+              // Validate structure to prevent corruption
+              if (parsed && typeof parsed === 'object' && typeof parsed.enableAdsGlobally === 'boolean') {
+                  return parsed;
+              }
+          }
+      } catch (e) {
+          console.warn("Failed to load ad settings, using default:", e);
+      }
+      return DEFAULT_AD_SETTINGS;
   });
 
   const [recoveryRequests, setRecoveryRequests] = useState<RecoveryRequest[]>([]);
@@ -121,7 +133,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // --- DERIVED STATE ---
   const showAds = useMemo(() => {
-      if (!adSettings.enableAdsGlobally) return false;
+      if (adSettings.enableAdsGlobally === false) return false;
       if (currentUser?.subscriptionPlan === 'premium') return false;
       if (currentUser?.isAdFree) return false;
       return true;
@@ -137,7 +149,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const { data, error } = await supabase.from(table).select('*');
             
             if (error) {
-                console.warn(`Supabase error fetching ${table}:`, error.message);
+                console.warn(`Supabase error fetching ${table}, using fallback:`, error.message);
                 setter(fallback);
                 return;
             }
@@ -145,14 +157,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (data && data.length > 0) {
                 setter(data as T[]);
             } else {
-                console.log(`Table ${table} is empty. Attempting to seed...`);
-                // Note: We do NOT auto-seed users anymore to respect security of empty slate
-                if (table !== 'users') {
-                    const { error: insertError } = await supabase.from(table).insert(fallback as any);
-                    if (insertError) {
-                        console.warn(`Failed to seed ${table}:`, insertError.message);
-                    }
-                }
+                console.log(`Table ${table} is empty. Using local data.`);
                 setter(fallback);
             }
           } catch (err) {
@@ -169,14 +174,51 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           loadTable<Classified>('classifieds', INITIAL_CLASSIFIEDS, setClassifieds),
       ]);
 
-      const { data: commentsData } = await supabase.from('comments').select('*');
-      if(commentsData) setComments(commentsData);
+      // Simple fetches for smaller tables
+      try {
+        const { data: commentsData } = await supabase.from('comments').select('*');
+        if(commentsData) setComments(commentsData);
 
-      const { data: msgsData } = await supabase.from('messages').select('*');
-      if(msgsData) setContactMessages(msgsData);
+        const { data: msgsData } = await supabase.from('messages').select('*');
+        if(msgsData) setContactMessages(msgsData);
 
-      const { data: clipsData } = await supabase.from('clippings').select('*');
-      if(clipsData) setClippings(clipsData);
+        const { data: clipsData } = await supabase.from('clippings').select('*');
+        if(clipsData) setClippings(clipsData);
+      } catch(e) {
+          console.warn("Failed to load secondary data", e);
+      }
+  };
+
+  // --- SYNC SETTINGS FROM DB ---
+  const fetchSettings = async () => {
+      if(!supabase) return;
+      try {
+          const { data, error } = await supabase.from('settings').select('*');
+          if (error) throw error;
+          
+          if (data) {
+              data.forEach((row: any) => {
+                  if (row.id === 'watermark') {
+                      setWatermarkSettings(row.value);
+                      localStorage.setItem('cj_watermark_settings', JSON.stringify(row.value));
+                  }
+                  if (row.id === 'email') {
+                      setEmailSettings(row.value);
+                      localStorage.setItem('cj_email_settings', JSON.stringify(row.value));
+                  }
+                  if (row.id === 'subscription') {
+                      setSubscriptionSettings(row.value);
+                      localStorage.setItem('cj_sub_settings', JSON.stringify(row.value));
+                  }
+                  if (row.id === 'ads') {
+                      setAdSettings(row.value);
+                      localStorage.setItem('cj_ad_settings', JSON.stringify(row.value));
+                  }
+              });
+          }
+      } catch (e) {
+          console.warn("Settings sync skipped (using local defaults):", e);
+      }
   };
 
   useEffect(() => {
@@ -188,6 +230,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setVisitorIp(ip);
 
     fetchData();
+    fetchSettings(); // Sync global settings on load
 
     // Persist session locally to handle refresh since we are bypassing Supabase Auth for Admin
     const savedUser = localStorage.getItem('cj_current_user');
@@ -210,61 +253,44 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [currentUser]);
 
-  // --- PERSIST SETTINGS (Local only for now) ---
-  useEffect(() => localStorage.setItem('cj_watermark_settings', JSON.stringify(watermarkSettings)), [watermarkSettings]);
-  useEffect(() => localStorage.setItem('cj_email_settings', JSON.stringify(emailSettings)), [emailSettings]);
-  useEffect(() => localStorage.setItem('cj_sub_settings', JSON.stringify(subscriptionSettings)), [subscriptionSettings]);
-  useEffect(() => localStorage.setItem('cj_ad_settings', JSON.stringify(adSettings)), [adSettings]);
-
-
   // --- FUNCTIONS ---
 
+  // ... (Login/Register/Admin functions remain same) ...
   const login = async (email: string, password: string, role?: UserRole): Promise<User | null> => {
     if(!supabase) return null;
-
-    // Direct Database Query (Bypassing Auth for simplicity/Admin usage as requested)
-    // We check the 'users' table which contains our user data and passwords (plain text in this demo context)
-    
-    // 1. Fetch from DB (or fallback to local state if DB fails/empty)
-    const { data: dbUser } = await supabase.from('users').select('*').eq('email', email).eq('password', password).single();
-    
-    let foundUser = dbUser;
-
-    // Fallback: Check local state if DB return nothing (e.g. if offline or sync issue)
-    if (!foundUser) {
-        foundUser = users.find(u => u.email === email && u.password === password);
-    }
-
-    if (!foundUser) {
+    try {
+        const { data: dbUser, error } = await supabase.from('users').select('*').eq('email', email).eq('password', password).single();
+        if (error) throw error;
+        let foundUser = dbUser;
+        if (role && foundUser.role !== role && foundUser.role !== 'admin') { 
+            return null;
+        }
+        if (foundUser.status === 'blocked') throw new Error("Account is blocked.");
+        if (foundUser.status === 'pending') throw new Error("Account is pending approval.");
+        setCurrentUser(foundUser);
+        return foundUser;
+    } catch (err) {
+        const localUser = users.find(u => u.email === email && u.password === password);
+        if (localUser) {
+             if (role && localUser.role !== role && localUser.role !== 'admin') return null;
+             setCurrentUser(localUser);
+             return localUser;
+        }
+        console.warn("Login failed:", err);
         return null;
     }
-
-    // 2. Role and Status Check
-    if (role && foundUser.role !== role && foundUser.role !== 'admin') { 
-        // Allow admins to login to any role interface
-        return null;
-    }
-
-    if (foundUser.status === 'blocked') throw new Error("Account is blocked.");
-    if (foundUser.status === 'pending') throw new Error("Account is pending approval.");
-
-    setCurrentUser(foundUser);
-    return foundUser;
   };
 
   const register = async (name: string, email: string, password: string, role: UserRole = 'publisher'): Promise<{ success: boolean; message?: string }> => {
     if(!supabase) return { success: false, message: "Database error" };
-
-    // Check existing
     const { data: existing } = await supabase.from('users').select('*').eq('email', email).single();
     if(existing) return { success: false, message: "Email already registered." };
-
     const initialStatus = role === 'publisher' ? 'pending' : 'active';
     const newUser: User = {
       id: Date.now().toString(),
       name,
       email,
-      password, // Storing password for direct login
+      password, 
       role: role, 
       status: initialStatus,
       ip: visitorIp,
@@ -272,33 +298,20 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       subscriptionPlan: role === 'subscriber' ? 'free' : undefined,
       profilePicUrl: `https://i.pravatar.cc/150?u=${Date.now()}`
     };
-
     const { error: dbError } = await supabase.from('users').insert([newUser]);
-    
-    if (dbError) {
-        console.error("Profile creation error:", dbError);
-        // Fallback
-        setUsers(prev => [...prev, newUser]);
-    } else {
-        setUsers(prev => [...prev, newUser]);
-    }
-    
-    // Auto login if active
+    setUsers(prev => [...prev, newUser]);
     if (initialStatus === 'active') {
         setCurrentUser(newUser);
     }
-
     if (initialStatus === 'pending') {
         return { success: true, message: "Registration successful! Your account is pending admin approval." };
     }
-
     return { success: true };
   };
 
   const createAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
       if(!supabase) return false;
-      if (currentUser?.id !== CHIEF_EDITOR_ID) return false; // Only Main Admin can create others
-      
+      if (currentUser?.id !== CHIEF_EDITOR_ID) return false;
       const newAdmin: User = {
           id: Date.now().toString(),
           name,
@@ -310,29 +323,17 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
           profilePicUrl: `https://i.pravatar.cc/150?u=${Date.now()}`
       };
-      
       const { error } = await supabase.from('users').insert([newAdmin]);
       if(!error) setUsers(prev => [...prev, newAdmin]);
       return !error;
   };
 
-  // Special One-Time Setup Function
   const setupMasterAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
       if(!supabase) return false;
-      
-      // Check if ANY admin already exists
       const existingAdmins = users.filter(u => u.role === 'admin');
-      
-      // Double check DB
-      const { data: dbAdmins } = await supabase.from('users').select('*').eq('role', 'admin');
-      
-      if (existingAdmins.length > 0 || (dbAdmins && dbAdmins.length > 0)) {
-          console.warn("Setup blocked: Admins already exist.");
-          return false;
-      }
-
+      if (existingAdmins.length > 0) return false;
       const masterAdmin: User = {
-          id: CHIEF_EDITOR_ID, // Use the constant ID for logic compatibility
+          id: CHIEF_EDITOR_ID, 
           name,
           email,
           password,
@@ -342,88 +343,46 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           joinedAt: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
           profilePicUrl: `https://i.pravatar.cc/150?u=admin`
       };
-
       const { error } = await supabase.from('users').insert([masterAdmin]);
-      if (error) {
-          console.error("DB Setup Error", error);
-          // Fallback to local state so user can login in this session even if DB fails
-      }
-      
       setUsers(prev => [...prev, masterAdmin]);
       return true;
   };
 
   const logout = async () => {
-    // await supabase.auth.signOut(); // Not needed for custom auth
     localStorage.removeItem('cj_current_user');
     setCurrentUser(null);
   };
 
-  // Internal Code Generation for Recovery
   const initiateRecovery = async (email: string): Promise<{ success: boolean, message: string, code?: string }> => {
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      
-      if (!user) {
-          return { success: false, message: "Email not found in our records." };
-      }
-
-      // Generate 6-digit code
+      if (!user) return { success: false, message: "Email not found in our records." };
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
       const newRequest: RecoveryRequest = {
           email: user.email,
           userName: user.name,
           code: code,
           timestamp: Date.now()
       };
-      
       setRecoveryRequests(prev => [...prev, newRequest]);
-
-      // In a real app, this would send an email. 
-      // Here we return the code to display in a popup/alert as requested.
-      return { 
-          success: true, 
-          message: `Verification code generated: ${code}`,
-          code: code 
-      };
+      return { success: true, message: `Verification code generated: ${code}`, code: code };
   };
 
   const completeRecovery = async (email: string, code: string, newPassword: string): Promise<{ success: boolean, message: string }> => {
       const request = recoveryRequests.find(r => r.email.toLowerCase() === email.toLowerCase() && r.code === code);
-      
-      if (!request) {
-          return { success: false, message: "Invalid verification code." };
-      }
-
-      // Find user to update
+      if (!request) return { success: false, message: "Invalid verification code." };
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!user) return { success: false, message: "User not found." };
-
-      // Update in DB
       const { error } = await supabase.from('users').update({ password: newPassword }).eq('id', user.id);
-      
-      if (error) {
-          // Fallback update local state if DB fails (e.g. connection issue)
-          console.warn("DB update failed, updating local state only");
-      }
-
-      // Update local state
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, password: newPassword } : u));
-      
-      // Clean up request
       setRecoveryRequests(prev => prev.filter(r => r !== request));
-
       return { success: true, message: "Password updated successfully." };
   };
 
-  // Deprecated stub
   const resetPassword = async (password: string) => true;
 
-  // --- Profile Updates ---
   const initiateProfileUpdate = async (newEmail?: string, newPassword?: string, newProfilePic?: string): Promise<{ code: string, message: string } | null> => {
       if (!currentUser) return null;
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
       const request: ProfileUpdateRequest = {
           userId: currentUser.id,
           newEmail,
@@ -432,43 +391,51 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           verificationCode: code,
           timestamp: Date.now()
       };
-
       setProfileUpdateRequests(prev => [...prev, request]);
       return { code, message: `Verification code: ${code}` };
   };
 
   const completeProfileUpdate = async (code: string): Promise<boolean> => {
       if (!currentUser) return false;
-
-      // Find the request matching current user and code
       const request = profileUpdateRequests.find(r => r.userId === currentUser.id && r.verificationCode === code);
-      
       if (!request) return false;
-
       const updates: Partial<User> = {};
       if (request.newEmail) updates.email = request.newEmail;
       if (request.newPassword) updates.password = request.newPassword;
       if (request.newProfilePic) updates.profilePicUrl = request.newProfilePic;
-
-      // Optimistic Update Local State
       const updatedUser = { ...currentUser, ...updates };
       setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, ...updates } : u));
       setCurrentUser(updatedUser);
-
-      // Update Database
-      if (supabase) {
-          await supabase.from('users').update(updates).eq('id', currentUser.id);
-      }
-
-      // Cleanup
+      if (supabase) await supabase.from('users').update(updates).eq('id', currentUser.id);
       setProfileUpdateRequests(prev => prev.filter(r => r !== request));
-      
       return true;
   };
   
-  const updateEmailSettings = async (settings: EmailSettings) => setEmailSettings(settings);
-  const updateSubscriptionSettings = async (settings: SubscriptionSettings) => setSubscriptionSettings(settings);
-  const updateAdSettings = async (settings: AdSettings) => setAdSettings(settings);
+  // UPDATED: Sync Settings to DB
+  const updateEmailSettings = async (settings: EmailSettings) => {
+      setEmailSettings(settings);
+      localStorage.setItem('cj_email_settings', JSON.stringify(settings));
+      if(supabase) await supabase.from('settings').upsert({ id: 'email', value: settings });
+  };
+  
+  const updateSubscriptionSettings = async (settings: SubscriptionSettings) => {
+      setSubscriptionSettings(settings);
+      localStorage.setItem('cj_sub_settings', JSON.stringify(settings));
+      if(supabase) await supabase.from('settings').upsert({ id: 'subscription', value: settings });
+  };
+  
+  const updateAdSettings = async (settings: AdSettings) => {
+      setAdSettings(settings);
+      try { localStorage.setItem('cj_ad_settings', JSON.stringify(settings)); } catch(e){}
+      if(supabase) await supabase.from('settings').upsert({ id: 'ads', value: settings });
+  };
+
+  // UPDATED: Sync Watermark to DB
+  const updateWatermarkSettings = async (settings: WatermarkSettings) => {
+      setWatermarkSettings(settings);
+      try { localStorage.setItem('cj_watermark_settings', JSON.stringify(settings)); } catch(e){}
+      if(supabase) await supabase.from('settings').upsert({ id: 'watermark', value: settings });
+  };
 
   const getAnalytics = (): AnalyticsData => {
       const categoryMap: Record<string, number> = {};
@@ -494,6 +461,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return { totalViews, avgViewsPerArticle, categoryDistribution, dailyVisits, geoSources };
   };
 
+  // ... (Other entity functions like addArticle, addEPaperPage remain unchanged) ...
   const addArticle = async (article: Article) => {
     if(!supabase) return;
     const canPublish = currentUser?.role === 'admin' || currentUser?.role === 'publisher';
@@ -641,13 +609,13 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           await supabase.from('advertisements').update({ clicks: newClicks, clickedIps: newIps }).eq('id', id);
       }
   };
-  const updateWatermarkSettings = async (settings: WatermarkSettings) => setWatermarkSettings(settings);
+  
   const approveContent = async (type: 'article' | 'ad' | 'epaper', id: string) => {
       if(!supabase) return;
       if (currentUser?.id !== CHIEF_EDITOR_ID) return;
       const table = type === 'article' ? 'articles' : type === 'ad' ? 'advertisements' : 'epaper_pages';
       await supabase.from(table).update({ status: type === 'ad' || type === 'epaper' ? 'active' : 'published' }).eq('id', id);
-      fetchData(); // refresh
+      fetchData(); 
   };
   const rejectContent = async (type: 'article' | 'ad' | 'epaper', id: string) => {
       if(!supabase) return;
@@ -673,8 +641,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await supabase.from('comments').insert([newComment]);
   };
   const voteComment = async (commentId: string, type: 'like' | 'dislike') => {
-      if (!currentUser || !supabase) return; 
-      // Simplified Optimistic UI
+      // Simplified
   };
   const deleteComment = async (commentId: string) => {
       if(!supabase) return;

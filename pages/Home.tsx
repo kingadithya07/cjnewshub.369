@@ -120,7 +120,8 @@ export const Home: React.FC = () => {
                                             </span>
                                         </div>
                                         
-                                        <h2 className="text-2xl md:text-4xl font-serif font-black leading-tight mb-3 drop-shadow-md line-clamp-2 animate-in slide-in-from-bottom-2 duration-500 delay-200">
+                                        {/* Increased line-height for Telugu script support */}
+                                        <h2 className="text-2xl md:text-4xl font-serif font-black leading-normal mb-3 drop-shadow-md line-clamp-2 animate-in slide-in-from-bottom-2 duration-500 delay-200">
                                             {article.title}
                                         </h2>
                                         
@@ -199,7 +200,8 @@ export const Home: React.FC = () => {
                                             <span className="text-[8px] font-bold text-white uppercase tracking-wider">{a.category}</span>
                                         </div>
                                     </div>
-                                    <h4 className="font-serif font-bold text-xs leading-tight line-clamp-3 text-ink group-hover:text-gold-dark transition-colors">{a.title}</h4>
+                                    {/* Adjusted leading for Telugu */}
+                                    <h4 className="font-serif font-bold text-xs leading-normal line-clamp-3 text-ink group-hover:text-gold-dark transition-colors">{a.title}</h4>
                                 </div>
                             ))}
                          </div>
@@ -216,7 +218,7 @@ export const Home: React.FC = () => {
                                     <div className="flex gap-2 items-start">
                                         <span className="text-xl font-serif font-black text-gray-200 leading-none mt-[-2px]">{i+1}</span>
                                         <div>
-                                            <h4 className="font-serif font-bold text-xs leading-tight text-gray-700 line-clamp-3 group-hover:text-gold mb-1">{a.title}</h4>
+                                            <h4 className="font-serif font-bold text-xs leading-normal text-gray-700 line-clamp-3 group-hover:text-gold mb-1">{a.title}</h4>
                                             <span className="text-[9px] text-gray-400 font-bold bg-gray-50 px-1 rounded flex items-center w-fit gap-1">
                                                 <Eye size={8} /> {a.views}
                                             </span>
@@ -262,7 +264,7 @@ export const Home: React.FC = () => {
                                                 <span className="text-[10px] text-gray-400 whitespace-nowrap">{article.date}</span>
                                             </div>
                                             <h3 
-                                                className="text-base font-serif font-bold text-ink leading-snug group-hover:text-gold-dark transition-colors cursor-pointer line-clamp-2"
+                                                className="text-lg font-serif font-bold text-ink leading-normal group-hover:text-gold-dark transition-colors cursor-pointer line-clamp-2"
                                                 onClick={() => handleArticleClick(article.id)}
                                             >
                                                 {article.title}
@@ -279,7 +281,7 @@ export const Home: React.FC = () => {
                                                 <span className="text-[10px] font-bold text-gray-500 uppercase">{article.author}</span>
                                             </div>
 
-                                            <p className="text-xs text-gray-500 font-sans line-clamp-2 leading-relaxed mt-1">
+                                            <p className="text-sm text-gray-500 font-sans line-clamp-3 leading-relaxed mt-1">
                                                 {article.excerpt}
                                             </p>
                                         </div>
@@ -313,7 +315,7 @@ export const Home: React.FC = () => {
                             <li key={article.id} className="flex gap-4 group cursor-pointer border-b border-gray-100 pb-4 last:border-0" onClick={() => handleArticleClick(article.id)}>
                                 <span className="text-3xl font-serif font-black text-gray-200 group-hover:text-gold transition-colors">0{i + 1}</span>
                                 <div>
-                                    <h5 className="font-serif font-bold text-sm leading-snug group-hover:text-gray-600 transition-colors line-clamp-2">
+                                    <h5 className="font-serif font-bold text-base leading-normal group-hover:text-gray-600 transition-colors line-clamp-2">
                                         {article.title}
                                     </h5>
                                     <div className="flex items-center justify-between mt-2">
@@ -388,7 +390,7 @@ export const Home: React.FC = () => {
                              </div>
                          )}
 
-                         <h5 className="font-serif font-bold text-sm text-ink group-hover:text-gold-dark transition-colors line-clamp-1">{ad.title}</h5>
+                         <h5 className="font-serif font-bold text-sm text-ink group-hover:text-gold-dark transition-colors line-clamp-1 leading-normal">{ad.title}</h5>
                          <p className="text-xs text-gray-600 mt-1 line-clamp-2 leading-relaxed flex-1">{ad.description}</p>
                          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-1 text-[10px] text-gray-400 font-bold">
                              <span className="text-ink truncate">{ad.contact}</span>
