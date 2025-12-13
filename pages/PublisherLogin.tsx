@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNews } from '../context/NewsContext';
 import { useNavigate, Link } from 'react-router-dom';
@@ -10,18 +11,22 @@ export const PublisherLogin: React.FC = () => {
   const { login } = useNews();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
-    const user = login(email, password);
-    
-    if (user) {
-        // Both admins and publishers can theoretically access, but this is the "Publisher" entry point
-        // We allow both for convenience, or you could restrict to role === 'publisher'
-        navigate('/admin'); 
-    } else {
-      setError('Invalid email or password.');
+    try {
+        const user = await login(email, password);
+        
+        if (user) {
+            // Both admins and publishers can theoretically access, but this is the "Publisher" entry point
+            // We allow both for convenience, or you could restrict to role === 'publisher'
+            navigate('/admin'); 
+        } else {
+          setError('Invalid email or password.');
+        }
+    } catch (err: any) {
+        setError(err.message || 'Login failed.');
     }
   };
 

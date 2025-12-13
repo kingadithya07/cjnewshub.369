@@ -150,9 +150,7 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // --- INITIAL DATA LOAD & SEEDING ---
   const fetchData = async () => {
-      if(!supabase) return;
-      
-      // Load Security Requests (simulated table)
+      // Local Storage Fallback for Users if Supabase fails/is empty
       try {
           // For demo, we store requests in localStorage to persist across refreshes
           const savedReqs = localStorage.getItem('cj_security_requests');
@@ -161,12 +159,16 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const loadTable = async <T,>(table: string, fallback: T[], setter: (data: T[]) => void) => {
           try {
-            const { data, error } = await supabase.from(table).select('*');
-            if (error || !data || data.length === 0) {
+            if (supabase) {
+                const { data, error } = await supabase.from(table).select('*');
+                if (error || !data || data.length === 0) {
+                    setter(fallback);
+                    return;
+                }
+                setter(data as T[]);
+            } else {
                 setter(fallback);
-                return;
             }
-            setter(data as T[]);
           } catch (err) {
               setter(fallback);
           }
@@ -314,8 +316,14 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let user = users.find(u => u.email === email && u.password === password);
     if (user) {
         if (role && user.role !== role && user.role !== 'admin') return null;
-        if (user.status === 'blocked' || user.status === 'pending') return null;
         
+        if (user.status === 'pending') {
+            throw new Error("Account pending approval. Please contact admin.");
+        }
+        if (user.status === 'blocked') {
+            throw new Error("Account has been suspended.");
+        }
+
         // --- FIRST DEVICE AUTO-TRUST LOGIC ---
         // Ensure that if this is the first device, the currentUser object reflects it immediately
         if (!user.trustedDevices || user.trustedDevices.length === 0) {
@@ -332,11 +340,12 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return null;
   };
 
-  // ... (Register/CreateAdmin remain mostly same, just add trustedDevices: []) ...
   const register = async (name: string, email: string, password: string, role: UserRole = 'publisher'): Promise<{ success: boolean; message?: string }> => {
-    if(!supabase) return { success: false, message: "Database error" };
-    const { data: existing } = await supabase.from('users').select('*').eq('email', email).single();
-    if(existing) return { success: false, message: "Email already registered." };
+    // 1. Check Local State First (Sync)
+    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+        return { success: false, message: "Email already registered." };
+    }
+
     const initialStatus = role === 'publisher' ? 'pending' : 'active';
     const newUser: User = {
       id: Date.now().toString(),
@@ -347,10 +356,28 @@ export const NewsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       profilePicUrl: `https://i.pravatar.cc/150?u=${Date.now()}`,
       trustedDevices: [currentDeviceId] // Trust the device used for registration
     };
-    const { error: dbError } = await supabase.from('users').insert([newUser]);
+
+    // 2. Try Supabase (Async, tolerant to failure)
+    try {
+        if (supabase) {
+             const { error: dbError } = await supabase.from('users').insert([newUser]);
+             if (dbError) console.warn("Supabase insert failed, falling back to local state.", dbError);
+        }
+    } catch (e) {
+        console.warn("Supabase connection error, using local state.", e);
+    }
+
+    // 3. Update Local State
     setUsers(prev => [...prev, newUser]);
-    if (initialStatus === 'active') setCurrentUser(newUser);
-    return { success: true };
+    
+    // 4. Auto-login if active
+    if (initialStatus === 'active') {
+        setCurrentUser(newUser);
+        return { success: true };
+    }
+
+    // 5. Return success with message for pending users
+    return { success: true, message: "Account created successfully! Your account is pending approval by an administrator." };
   };
 
   const createAdmin = async (name: string, email: string, password: string): Promise<boolean> => {
