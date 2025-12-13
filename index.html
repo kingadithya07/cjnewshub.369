@@ -47,6 +47,17 @@
         /* Ensure baseline rendering for complex scripts */
         text-rendering: optimizeLegibility; 
       }
+      /* Force consistent font sizing in articles to override copy-paste styles */
+      .prose p, .prose span, .prose div, .prose li {
+          font-size: 1.125rem !important; /* 18px */
+          line-height: 2 !important;
+          color: #1A1A1A;
+          font-family: "Noto Serif Telugu", "Playfair Display", serif;
+      }
+      .prose h1 { font-size: 2.25rem !important; line-height: 1.3 !important; }
+      .prose h2 { font-size: 1.875rem !important; line-height: 1.4 !important; margin-top: 1.5em !important; }
+      .prose h3 { font-size: 1.5rem !important; line-height: 1.5 !important; }
+      
       /* Custom scrollbar for clippings */
       .scrollbar-hide::-webkit-scrollbar {
           display: none;

@@ -85,13 +85,26 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  password?: string; // In a real app, never store plain text passwords
+  password?: string; 
   status: 'active' | 'blocked' | 'pending';
   ip?: string;
   joinedAt?: string;
   subscriptionPlan?: 'free' | 'premium';
-  isAdFree?: boolean; // Manual override to disable ads
+  isAdFree?: boolean; 
   profilePicUrl?: string;
+  trustedDevices: string[]; // List of approved Device IDs
+}
+
+export interface SecurityRequest {
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    deviceId: string;
+    type: 'login' | 'recovery';
+    status: 'pending' | 'approved' | 'rejected';
+    timestamp: number;
+    ip: string;
 }
 
 export interface RecoveryRequest {

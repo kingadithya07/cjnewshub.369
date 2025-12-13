@@ -1,8 +1,7 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNews } from '../context/NewsContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, UserCheck, ShieldCheck, KeyRound, ArrowLeft, Shield } from 'lucide-react';
+import { Lock, UserCheck, ShieldCheck, KeyRound, ArrowLeft, Shield, Smartphone, Loader2 } from 'lucide-react';
 import { UserRole } from '../types';
 
 export const Login: React.FC = () => {
@@ -12,6 +11,9 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
+  // Security / Pending State
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  
   // Recovery State
   const [isRecovering, setIsRecovering] = useState(false);
   const [recoveryStep, setRecoveryStep] = useState<'email' | 'code'>('email');
@@ -19,11 +21,39 @@ export const Login: React.FC = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  const { login, initiateRecovery, completeRecovery, users } = useNews();
+  const { login, requestAccess, checkRequestStatus, initiateRecovery, completeRecovery, users } = useNews();
   const navigate = useNavigate();
+  const pollIntervalRef = useRef<any>(null);
 
   // Check if any admin exists in the system
   const adminExists = users.some(u => u.role === 'admin');
+
+  // Poll for Approval status if waiting
+  useEffect(() => {
+      if (pendingRequestId) {
+          pollIntervalRef.current = setInterval(async () => {
+              const status = await checkRequestStatus(pendingRequestId);
+              if (status === 'approved') {
+                  clearInterval(pollIntervalRef.current!);
+                  setPendingRequestId(null);
+                  setLoading(true);
+                  // Retry actual login
+                  const user = await login(email, password, loginType);
+                  if (user) {
+                      navigate(user.role === 'admin' || user.role === 'publisher' ? '/admin' : '/');
+                  }
+              } else if (status === 'rejected') {
+                  clearInterval(pollIntervalRef.current!);
+                  setPendingRequestId(null);
+                  setError("Access Denied by User.");
+                  setLoading(false);
+              }
+          }, 2000);
+      }
+      return () => {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      };
+  }, [pendingRequestId, email, password, loginType, login, checkRequestStatus, navigate]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,6 +61,23 @@ export const Login: React.FC = () => {
     setLoading(true);
     
     try {
+        // Step 1: Check device verification first
+        const accessResult = await requestAccess(email, password, 'login');
+        
+        if (!accessResult.success) {
+            // Need approval
+            if (accessResult.requestId) {
+                setPendingRequestId(accessResult.requestId);
+                setLoading(false); 
+                return; // Stop here, wait for poll
+            } else {
+                setError(accessResult.message);
+                setLoading(false);
+                return;
+            }
+        }
+
+        // Step 2: Proceed with standard login
         const user = await login(email, password, loginType);
         if (user) {
             if (user.role === 'admin' || user.role === 'publisher') {
@@ -44,7 +91,7 @@ export const Login: React.FC = () => {
     } catch (err: any) {
         setError(err.message || 'Login failed.');
     } finally {
-        setLoading(false);
+        if (!pendingRequestId) setLoading(false);
     }
   };
 
@@ -63,6 +110,7 @@ export const Login: React.FC = () => {
               setError("Unexpected error: No code generated.");
           }
       } else {
+          // If access denied due to device, showing error is correct
           setError(result.message);
       }
       setLoading(false);
@@ -92,6 +140,35 @@ export const Login: React.FC = () => {
       }
       setLoading(false);
   };
+
+  // --- RENDER WAITING SCREEN ---
+  if (pendingRequestId) {
+      return (
+        <div className="min-h-[70vh] flex items-center justify-center py-12 px-4 bg-paper">
+            <div className="max-w-md w-full bg-white shadow-xl p-8 rounded-lg border-t-4 border-yellow-500 text-center animate-pulse">
+                <div className="mx-auto w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-6">
+                    <Smartphone size={32} />
+                </div>
+                <h2 className="text-2xl font-serif font-bold text-gray-900 mb-2">New Device Detected</h2>
+                <p className="text-gray-600 text-sm mb-6">
+                    For your security, please approve this login request on one of your already logged-in devices.
+                </p>
+                <div className="flex items-center justify-center gap-2 text-gold-dark font-bold text-xs uppercase tracking-widest">
+                    <Loader2 size={16} className="animate-spin" /> Waiting for approval...
+                </div>
+                <button 
+                    onClick={() => {
+                        setPendingRequestId(null);
+                        setError('');
+                    }}
+                    className="mt-8 text-gray-400 hover:text-gray-600 text-xs font-bold underline"
+                >
+                    Cancel Request
+                </button>
+            </div>
+        </div>
+      );
+  }
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-paper">
@@ -155,7 +232,7 @@ export const Login: React.FC = () => {
                             disabled={loading}
                             className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold uppercase tracking-widest text-white bg-ink hover:bg-gray-800 transition-colors disabled:opacity-70"
                         >
-                            {loading ? 'Generating Code...' : 'Get Verification Code'}
+                            {loading ? 'Verifying Device...' : 'Get Verification Code'}
                         </button>
                      </form>
                 ) : (
@@ -283,7 +360,7 @@ export const Login: React.FC = () => {
                             ? 'bg-ink hover:bg-gray-800 focus:ring-ink' 
                             : 'bg-gold hover:bg-gold-dark focus:ring-gold'} ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
-                        {loading ? 'Authenticating...' : `Sign In as ${loginType}`}
+                        {loading ? 'Verifying...' : `Sign In as ${loginType}`}
                     </button>
                     </div>
                     

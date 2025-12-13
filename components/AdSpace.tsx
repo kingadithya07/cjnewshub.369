@@ -15,7 +15,9 @@ export const AdSpace: React.FC<AdSpaceProps> = ({ size, className = '', label = 
 
   // Filter ads for this specific size that are active and within date range
   const activeAds = useMemo(() => {
+      // Immediate return if global ads are disabled
       if (!showAds) return [];
+      
       const now = new Date().toISOString().split('T')[0];
       return advertisements.filter(ad => 
           ad.size === size && 
@@ -32,6 +34,7 @@ export const AdSpace: React.FC<AdSpaceProps> = ({ size, className = '', label = 
       return activeAds[randomIndex];
   }, [activeAds]);
 
+  // Double check: Do not render anything if ads are disabled globally
   if (!showAds) return null;
 
   return (

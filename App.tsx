@@ -15,6 +15,7 @@ import { Contact } from './pages/Contact';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { Classifieds } from './pages/Classifieds';
 import { AdminSetup } from './pages/AdminSetup';
+import { SecurityAlert } from './components/SecurityAlert';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -22,9 +23,10 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isSetup = location.pathname === '/setup-admin';
 
   return (
-    <div className="flex flex-col min-h-screen font-sans text-ink bg-paper selection:bg-gold/30">
+    <div className="flex flex-col min-h-screen font-sans text-ink bg-paper selection:bg-gold/30 relative">
+      <SecurityAlert /> 
+      
       {!isEPaperReader && !isSetup && <Header />}
-      {/* If E-Paper reader, we hide standard header to maximize screen space, or show a minimal one (handled in EPaper component) */}
       
       <main className={`flex-grow ${isEPaperReader || isSetup ? '' : 'pt-4'}`}>
         {children}

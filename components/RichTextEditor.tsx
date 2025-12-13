@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect } from 'react';
-import { Bold, Italic, Underline, RotateCcw, RotateCw, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Type, Heading1, Heading2, Quote, Pilcrow } from 'lucide-react';
+import { Bold, Italic, Underline, RotateCcw, RotateCw, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Type, Heading1, Heading2, Quote, Pilcrow, Eraser } from 'lucide-react';
 
 interface RichTextEditorProps {
     value: string;
@@ -10,12 +10,19 @@ interface RichTextEditorProps {
 export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange }) => {
     const contentRef = useRef<HTMLDivElement>(null);
 
-    // Initial content load
+    // Sync content when the 'value' prop changes (e.g., clicking Edit on a different article)
     useEffect(() => {
-        if (contentRef.current && !contentRef.current.innerHTML) {
-            contentRef.current.innerHTML = value;
+        if (contentRef.current) {
+            // Only update if the new value is substantially different or empty to avoid cursor jumping during typing
+            // This ensures when you click "Edit", the content actually loads.
+            if (contentRef.current.innerHTML !== value) {
+                // If the editor is empty (initial load) or the value changed significantly (switching articles)
+                if (contentRef.current.innerHTML === '' || Math.abs(contentRef.current.innerHTML.length - value.length) > 5) {
+                     contentRef.current.innerHTML = value;
+                }
+            }
         }
-    }, []); // Run once on mount
+    }, [value]);
 
     const execCommand = (command: string, val?: string) => {
         document.execCommand(command, false, val);
@@ -65,6 +72,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange 
                         className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
                     />
                 </div>
+                
+                {/* Clear Formatting Button - Fixes font size mismatch */}
+                <button type="button" onClick={() => execCommand('removeFormat')} className="p-1.5 hover:bg-gray-200 rounded transition-colors text-red-600" title="Clear Formatting (Fix Fonts)"><Eraser size={16}/></button>
 
                 <div className="w-px h-6 bg-gray-300 mx-1 self-center"></div>
 

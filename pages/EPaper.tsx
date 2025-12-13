@@ -43,10 +43,13 @@ export const EPaper: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
-  // Custom Header State (Admin Only)
+  // Custom Header & Footer State
   const [headerImage, setHeaderImage] = useState<string | null>(null);
   const [headerText, setHeaderText] = useState<string>('');
-  const [showHeaderOptions, setShowHeaderOptions] = useState(false);
+  
+  // New: Custom Watermark State (Local override)
+  const [localWatermarkLogo, setLocalWatermarkLogo] = useState<string | null>(null);
+  const [showClipOptions, setShowClipOptions] = useState(false);
 
   const navigate = useNavigate();
   
@@ -95,6 +98,7 @@ export const EPaper: React.FC = () => {
             scalable: true,
             zoomable: true, // Enabled zooming
             wheelZoomRatio: 0.1,
+            checkCrossOrigin: true, // IMPORTANT for mobile caching and CORS
         });
     } else {
         // Clean up when leaving cropping mode
@@ -129,6 +133,7 @@ export const EPaper: React.FC = () => {
       setZoomLevel(1);
       setHeaderImage(null);
       setHeaderText('');
+      setLocalWatermarkLogo(null);
   };
 
   const handlePageClick = (index: number) => {
@@ -145,6 +150,7 @@ export const EPaper: React.FC = () => {
       setZoomLevel(1);
       setHeaderImage(null);
       setHeaderText('');
+      setLocalWatermarkLogo(null);
   };
 
   const handleNext = () => {
@@ -180,6 +186,19 @@ export const EPaper: React.FC = () => {
           reader.onload = (readerEvent) => {
               if (readerEvent.target?.result) {
                   setHeaderImage(readerEvent.target.result as string);
+              }
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleWatermarkLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (readerEvent) => {
+              if (readerEvent.target?.result) {
+                  setLocalWatermarkLogo(readerEvent.target.result as string);
               }
           };
           reader.readAsDataURL(file);
@@ -278,15 +297,17 @@ export const EPaper: React.FC = () => {
 
                 let textStartX = padding;
 
-                // 4a. Draw Logo (if exists)
-                if (watermarkSettings.logoUrl) {
+                // 4a. Draw Logo (Local Override or Global)
+                const logoToUse = localWatermarkLogo || watermarkSettings.logoUrl;
+                
+                if (logoToUse) {
                     try {
                         const logoImg = await new Promise<HTMLImageElement>((resolve, reject) => {
                             const img = new Image();
                             img.crossOrigin = "Anonymous";
                             img.onload = () => resolve(img);
                             img.onerror = () => reject(new Error("Logo load failed"));
-                            img.src = watermarkSettings.logoUrl!;
+                            img.src = logoToUse!;
                         });
                         
                         const logoH = bottomStripHeight * 0.6; // 60% of strip height
@@ -327,11 +348,11 @@ export const EPaper: React.FC = () => {
             setIsSaved(false); // Reset save state
             setShowShareModal(true);
             setIsCropping(false);
-            setShowHeaderOptions(false); // Hide settings if open
+            setShowClipOptions(false); // Hide settings if open
 
         } catch (error) {
             console.error("Error creating clip:", error);
-            alert("Failed to save clip due to browser security restrictions on the image.");
+            alert("Failed to save clip. Browser security restrictions may prevent cropping remote images.");
         }
     }
   };
@@ -479,31 +500,30 @@ export const EPaper: React.FC = () => {
             {isCropping && (
                 <div className="flex gap-2 items-center relative">
                     
-                    {/* Header Settings - Admin Only */}
-                    {currentUser?.role === 'admin' && (
-                        <div className="relative">
-                            <button 
-                                onClick={() => setShowHeaderOptions(!showHeaderOptions)}
-                                className={`flex items-center gap-1 px-3 py-2 rounded-sm text-xs font-bold transition-colors ${headerImage || headerText ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}
-                                title="Add Header Image or Text"
-                            >
-                                <Settings size={16} />
-                                <span className="hidden sm:inline">Header</span>
-                            </button>
-                            
-                            {showHeaderOptions && (
-                                <div className="absolute top-full right-0 mt-2 w-72 bg-white text-ink p-4 rounded shadow-xl z-50 border border-gray-200 animate-in fade-in zoom-in-95 duration-200">
-                                    <h4 className="font-bold text-xs uppercase mb-3 border-b pb-1 text-ink flex justify-between items-center">
-                                        Header Settings
-                                        <button onClick={() => setShowHeaderOptions(false)}><X size={14}/></button>
-                                    </h4>
+                    {/* Header/Footer Settings Toggle */}
+                    <div className="relative">
+                        <button 
+                            onClick={() => setShowClipOptions(!showClipOptions)}
+                            className={`flex items-center gap-1 px-3 py-2 rounded-sm text-xs font-bold transition-colors ${headerImage || headerText || localWatermarkLogo ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}
+                            title="Add Header or Footer Image"
+                        >
+                            <Settings size={16} />
+                            <span className="hidden sm:inline">Design</span>
+                        </button>
+                        
+                        {showClipOptions && (
+                            <div className="absolute top-full right-0 mt-2 w-72 bg-white text-ink p-4 rounded shadow-xl z-50 border border-gray-200 animate-in fade-in zoom-in-95 duration-200">
+                                <h4 className="font-bold text-xs uppercase mb-3 border-b pb-1 text-ink flex justify-between items-center">
+                                    Clip Design Settings
+                                    <button onClick={() => setShowClipOptions(false)}><X size={14}/></button>
+                                </h4>
+                                
+                                {/* Header Section */}
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">Header (Top)</p>
+                                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 flex items-center gap-1"><ImageIcon size={12}/> Upload Header Image</label>
+                                    <input type="file" accept="image/*" onChange={handleHeaderImageUpload} className="text-xs w-full text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
                                     
-                                    <div className="mb-4">
-                                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 flex items-center gap-1"><ImageIcon size={12}/> Upload Image</label>
-                                        <input type="file" accept="image/*" onChange={handleHeaderImageUpload} className="text-xs w-full text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
-                                        {headerImage && <button onClick={() => setHeaderImage(null)} className="text-[10px] text-red-600 underline mt-1 block w-full text-right">Remove Image</button>}
-                                    </div>
-
                                     <div className="relative flex py-2 items-center">
                                         <div className="flex-grow border-t border-gray-200"></div>
                                         <span className="flex-shrink-0 mx-2 text-gray-400 text-[10px] font-bold">OR</span>
@@ -511,24 +531,31 @@ export const EPaper: React.FC = () => {
                                     </div>
 
                                     <div className="mb-1">
-                                        <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 flex items-center gap-1"><Type size={12}/> Header Text</label>
+                                        <label className="block text-xs font-bold text-gray-500 mb-1">Header Text</label>
                                         <input 
                                             type="text" 
                                             value={headerText} 
                                             onChange={(e) => setHeaderText(e.target.value)}
                                             placeholder="e.g. BREAKING NEWS"
-                                            className="w-full border p-2 text-sm rounded focus:ring-1 focus:ring-gold outline-none"
+                                            className="w-full border p-2 text-xs rounded focus:ring-1 focus:ring-gold outline-none"
                                         />
-                                        {headerText && <button onClick={() => setHeaderText('')} className="text-[10px] text-red-600 underline mt-1 block w-full text-right">Clear Text</button>}
                                     </div>
-                                    
-                                    <div className="text-[9px] text-gray-400 italic mt-2 bg-gray-50 p-1.5 rounded border border-gray-100">
-                                        Note: Image takes precedence if both are set. Background will be white.
-                                    </div>
+                                    {(headerImage || headerText) && <button onClick={() => {setHeaderImage(null); setHeaderText('');}} className="text-[10px] text-red-600 underline mt-1 block w-full text-right">Clear Header</button>}
                                 </div>
-                            )}
-                        </div>
-                    )}
+
+                                <div className="border-t border-gray-200 my-3"></div>
+
+                                {/* Footer/Watermark Section */}
+                                <div className="mb-2">
+                                    <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">Watermark (Bottom)</p>
+                                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1 flex items-center gap-1"><ImageIcon size={12}/> Upload Watermark Logo</label>
+                                    <input type="file" accept="image/*" onChange={handleWatermarkLogoUpload} className="text-xs w-full text-gray-600 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-[10px] file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
+                                    <p className="text-[9px] text-gray-400 italic mt-1">Overrides default logo.</p>
+                                    {localWatermarkLogo && <button onClick={() => setLocalWatermarkLogo(null)} className="text-[10px] text-red-600 underline mt-1 block w-full text-right">Use Default</button>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Crop Zoom Controls */}
                     <div className="flex items-center bg-gray-700 rounded mr-2 divide-x divide-gray-600">
@@ -541,7 +568,8 @@ export const EPaper: React.FC = () => {
                             setIsCropping(false);
                             setHeaderImage(null);
                             setHeaderText('');
-                            setShowHeaderOptions(false);
+                            setLocalWatermarkLogo(null);
+                            setShowClipOptions(false);
                         }}
                         className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-sm text-xs font-bold"
                     >
@@ -587,6 +615,7 @@ export const EPaper: React.FC = () => {
                                                 alt={`Page ${page.pageNumber}`} 
                                                 className="w-full h-full object-cover"
                                                 loading="lazy"
+                                                crossOrigin="anonymous" // Ensure cross-origin caching works
                                              />
                                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                                                  <div className="opacity-0 group-hover:opacity-100 bg-ink/80 text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-widest transform translate-y-2 group-hover:translate-y-0 transition-all flex items-center gap-2">
@@ -635,6 +664,7 @@ export const EPaper: React.FC = () => {
                                             src={currentPage.imageUrl}
                                             alt="Crop Source"
                                             className="block max-w-full" 
+                                            crossOrigin="anonymous" // Essential for CropperJS to export canvas
                                             // Let CropperJS manage dimensions via viewMode
                                         />
                                     </div>
@@ -656,6 +686,7 @@ export const EPaper: React.FC = () => {
                                                 ? "max-w-full max-h-[90vh] object-contain border-2 border-gray-700 bg-white" 
                                                 : "w-full md:w-auto h-auto max-w-4xl object-contain border-2 border-gray-700 bg-white"
                                             }
+                                            crossOrigin="anonymous"
                                         />
                                     </div>
                                 </div>
