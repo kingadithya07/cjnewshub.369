@@ -92,6 +92,19 @@ export interface User {
   subscriptionPlan?: 'free' | 'premium';
   isAdFree?: boolean; // Manual override to disable ads
   profilePicUrl?: string;
+  trustedDevices?: string[]; // Array of trusted device IDs
+}
+
+export interface SecurityRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  deviceId: string;
+  type: 'login' | 'recovery';
+  status: 'pending' | 'approved' | 'rejected';
+  timestamp: number;
+  ip?: string;
 }
 
 export interface RecoveryRequest {

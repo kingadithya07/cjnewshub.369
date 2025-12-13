@@ -8,6 +8,24 @@ export const CHIEF_EDITOR_ID = 'admin1';
 // A hardcoded Master Key for the Chief Editor to recover account if email access is lost
 export const MASTER_RECOVERY_KEY = 'CHIEF-SECURE-2025';
 
+// --- APPWRITE CONFIGURATION ---
+export const APPWRITE_CONFIG = {
+    PROJECT_ID: 'YOUR_PROJECT_ID', // Replace with your Appwrite Project ID
+    DATABASE_ID: 'YOUR_DATABASE_ID', // Replace with your Appwrite Database ID
+    COLLECTION_IDS: {
+        ARTICLES: 'articles',
+        USERS: 'users',
+        EPAPER: 'epaper_pages',
+        ADS: 'advertisements',
+        CLASSIFIEDS: 'classifieds',
+        CLIPPINGS: 'clippings',
+        COMMENTS: 'comments',
+        MESSAGES: 'messages',
+        SETTINGS: 'settings'
+    },
+    bucketId: 'YOUR_BUCKET_ID' // Optional: If using Appwrite Storage for images
+};
+
 export const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
     apiKey: 'SIMULATED-KEY-12345',
     senderEmail: 'support@cjnewshub.com',
